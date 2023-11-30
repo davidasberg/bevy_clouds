@@ -516,6 +516,7 @@ dependencies = [
  "bevy_editor_pls",
  "bytemuck",
  "half",
+ "thiserror",
  "vdb-rs",
 ]
 
