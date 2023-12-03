@@ -53,6 +53,7 @@ use bevy::{
         view::{ExtractedView, NoFrustumCulling, ViewTarget},
         Render, RenderApp, RenderSet,
     },
+    sprite::MaterialMesh2dBundle,
 };
 
 use bytemuck::{Pod, Zeroable};
@@ -63,6 +64,12 @@ use std::{error::Error, fs::File, io::BufReader};
 
 use cloud::{CloudRenderPlugin, CloudSettings};
 
+/// TODO:
+///                                     DONE    IN PROGRESS      TODO
+/// 1. Add a way to load a volume       [X]       [ ]             [ ]
+/// 2. Move volumetric texture to shader[ ]       [ ]             [x]
+/// 3. Raymarch volumetric texture      [ ]       [ ]             [x]
+
 fn main() {
     App::new()
         .add_plugins((
@@ -71,6 +78,7 @@ fn main() {
             bevy_editor_pls::EditorPlugin::new(),
             CloudRenderPlugin,
         ))
+        .init_asset_loader::<volume::loader::VolumeLoader>()
         .add_systems(Startup, setup)
         .add_systems(Update, (camera_controller, draw_cube_gizmo, rotate_light))
         .run();
@@ -130,21 +138,47 @@ fn camera_controller(
     }
 }
 
-fn rotate_light(time: Res<Time>, mut query: Query<&mut Transform, With<PointLight>>) {
+fn rotate_light(time: Res<Time>, mut query: Query<&mut Transform, With<DirectionalLight>>) {
     for mut transform in &mut query {
         transform.rotate(Quat::from_rotation_y(time.delta_seconds()));
     }
 }
-
 fn draw_cube_gizmo(mut gizmos: Gizmos) {
-    gizmos.cuboid(Transform::default(), Color::RED);
+    gizmos.cuboid(Transform::from_scale(Vec3::splat(2.)), Color::RED);
 
     // origin
     gizmos.sphere(Vec3::ZERO, Quat::IDENTITY, 0.1, Color::RED);
 }
 
-/// Set up a simple 3D scene
 fn setup(
+    mut commands: Commands,
+    images: Res<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    commands.spawn(DirectionalLightBundle {
+        transform: Transform::from_xyz(0.0, 8.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
+        ..default()
+    });
+
+    commands.spawn((Camera3dBundle {
+        transform: Transform::from_xyz(0.0, 2.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        ..default()
+    },));
+
+    commands.spawn((PbrBundle {
+        transform: Transform::from_xyz(0.0, -1.0, 0.0),
+        mesh: meshes.add(Mesh::from(shape::Plane {
+            size: 5.0,
+            subdivisions: 100,
+        })),
+        material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
+        ..Default::default()
+    },));
+}
+
+/// Set up a simple 3D scene
+fn setup_old(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -209,10 +243,6 @@ fn setup(
                 .collect(),
         ),
         NoFrustumCulling,
-        CloudSettings {
-            intensity: 0.02,
-            ..default()
-        },
     ));
 
     commands.spawn(PointLightBundle {

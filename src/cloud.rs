@@ -1,28 +1,79 @@
 use bevy::{
     core_pipeline::{core_3d, fullscreen_vertex_shader::fullscreen_shader_vertex_state},
     ecs::query::QueryItem,
+    pbr::{GlobalLightMeta, GpuLights, LightMeta, ViewLightsUniformOffset},
     prelude::*,
+    reflect::TypeUuid,
     render::{
         extract_component::{
             ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
         },
+        extract_resource::{ExtractResource, ExtractResourcePlugin},
+        render_asset::RenderAssets,
         render_graph::{
             NodeRunError, RenderGraphApp, RenderGraphContext, ViewNode, ViewNodeRunner,
         },
         render_resource::{
-            BindGroupEntries, BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
-            BindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites, FragmentState,
-            MultisampleState, Operations, PipelineCache, PrimitiveState, RenderPassColorAttachment,
+            AsBindGroup, BindGroupEntries, BindGroupLayout, BindGroupLayoutDescriptor,
+            BindGroupLayoutEntry, BindingType, BufferBindingType, CachedRenderPipelineId,
+            ColorTargetState, ColorWrites, FragmentState, IntoBinding, MultisampleState,
+            Operations, PipelineCache, PrimitiveState, RenderPassColorAttachment,
             RenderPassDescriptor, RenderPipelineDescriptor, Sampler, SamplerBindingType,
             SamplerDescriptor, ShaderStages, ShaderType, TextureFormat, TextureSampleType,
-            TextureViewDimension,
+            TextureViewDimension, UniformBuffer,
         },
         renderer::{RenderContext, RenderDevice},
+        settings,
         texture::BevyDefault,
-        view::ViewTarget,
+        view::{ViewTarget, ViewUniform, ViewUniformOffset, ViewUniforms},
         RenderApp,
     },
 };
+
+#[derive(Resource, ExtractResource, Default, Clone)]
+struct CloudVolume {
+    image: Handle<Image>,
+}
+
+// This is the component that will get passed to the shader
+#[derive(Component, Default, Clone, ExtractComponent, Copy, ShaderType, Reflect)]
+#[reflect(Component)]
+pub struct CloudSettings {
+    // The position of the cloud volume
+    pub pos: Vec3,
+    // The size of the cloud volume
+    pub bounds: Vec3,
+    // The number of steps to take when raymarching
+    pub steps: u32,
+    // The number of steps to take when raymarching the light
+    pub light_steps: u32,
+    // The light absorption
+    pub light_absorption: f32,
+    // The light scattering
+    pub light_transmittance: f32,
+    // The light absorption towards the sun
+    pub light_absorption_sun: f32,
+    // The darkness threshold
+    pub darkness_threshold: f32,
+}
+
+fn load_volume(asset_server: Res<AssetServer>, mut commands: Commands) {
+    let image: Handle<Image> = asset_server.load("volumes/wdas_cloud_sixteenth.vdb");
+    commands.insert_resource(CloudVolume { image });
+    commands.spawn((
+        CloudSettings {
+            pos: Vec3::new(0.0, 0.0, 0.0),
+            bounds: Vec3::new(1.0, 1.0, 1.0),
+            steps: 32,
+            light_steps: 8,
+            light_absorption: 1.6,
+            light_transmittance: 0.1,
+            light_absorption_sun: 1.05,
+            darkness_threshold: 0.28,
+        },
+        Name::new("cloud_settings"),
+    ));
+}
 
 /// It is generally encouraged to set up post processing effects as a plugin
 pub struct CloudRenderPlugin;
@@ -30,20 +81,13 @@ pub struct CloudRenderPlugin;
 impl Plugin for CloudRenderPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
-            // The settings will be a component that lives in the main world but will
-            // be extracted to the render world every frame.
-            // This makes it possible to control the effect from the main world.
-            // This plugin will take care of extracting it automatically.
-            // It's important to derive [`ExtractComponent`] on [`PostProcessingSettings`]
-            // for this plugin to work correctly.
             ExtractComponentPlugin::<CloudSettings>::default(),
-            // The settings will also be the data used in the shader.
-            // This plugin will prepare the component for the GPU by creating a uniform buffer
-            // and writing the data to that buffer every frame.
             UniformComponentPlugin::<CloudSettings>::default(),
+            ExtractResourcePlugin::<CloudVolume>::default(),
         ));
 
-        app.add_systems(Update, update_settings);
+        app.add_systems(Startup, load_volume);
+        app.register_type::<CloudSettings>();
 
         // We need to get the render app from the main app
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
@@ -75,9 +119,9 @@ impl Plugin for CloudRenderPlugin {
                 // Specify the node ordering.
                 // This will automatically create all required node edges to enforce the given ordering.
                 &[
-                    core_3d::graph::node::TONEMAPPING,
+                    core_3d::graph::node::END_MAIN_PASS,
                     CloudRenderNode::NAME,
-                    core_3d::graph::node::END_MAIN_PASS_POST_PROCESSING,
+                    core_3d::graph::node::BLOOM,
                 ],
             );
     }
@@ -107,7 +151,11 @@ impl ViewNode for CloudRenderNode {
     // but it's not a normal system so we need to define it manually.
     //
     // This query will only run on the view entity
-    type ViewQuery = &'static ViewTarget;
+    type ViewQuery = (
+        &'static ViewTarget,
+        &'static ViewUniformOffset,
+        &'static ViewLightsUniformOffset,
+    );
 
     // Runs the node logic
     // This is where you encode draw commands.
@@ -120,7 +168,7 @@ impl ViewNode for CloudRenderNode {
         &self,
         _graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
-        view_target: QueryItem<Self::ViewQuery>,
+        (view_target, view_uniform_offset, view_lights_uniform_offset): QueryItem<Self::ViewQuery>,
         world: &World,
     ) -> Result<(), NodeRunError> {
         // Get the pipeline resource that contains the global data we need
@@ -133,14 +181,18 @@ impl ViewNode for CloudRenderNode {
         let pipeline_cache = world.resource::<PipelineCache>();
 
         // Get the pipeline from the cache
-        let Some(pipeline) = pipeline_cache.get_render_pipeline(cloud_pipeline.pipeline_id)
-        else {
+        let Some(pipeline) = pipeline_cache.get_render_pipeline(cloud_pipeline.pipeline_id) else {
             return Ok(());
         };
 
-        // Get the settings uniform binding
-        let settings_uniforms = world.resource::<ComponentUniforms<CloudSettings>>();
-        let Some(settings_binding) = settings_uniforms.uniforms().binding() else {
+        // Get the mesh_view_bindings layout entries
+        let view_uniforms = world.resource::<ViewUniforms>();
+        let Some(view_uniforms) = view_uniforms.uniforms.binding() else {
+            return Ok(());
+        };
+
+        let global_light_meta = world.resource::<LightMeta>();
+        let Some(light_binding) = global_light_meta.view_gpu_lights.binding() else {
             return Ok(());
         };
 
@@ -153,6 +205,27 @@ impl ViewNode for CloudRenderNode {
         // the current main texture information to be lost.
         let post_process = view_target.post_process_write();
 
+        let Some(cloud) = world.get_resource::<CloudVolume>() else {
+            return Ok(());
+        };
+
+        let Some(texture) = world
+            .resource::<RenderAssets<Image>>()
+            .get(cloud.image.clone())
+        else {
+            info!("Resource exists but is not loaded yet");
+            return Ok(());
+        };
+
+        let settings_uniforms = world.resource::<ComponentUniforms<CloudSettings>>();
+        let Some(settings_binding) = settings_uniforms.uniforms().binding() else {
+            return Ok(());
+        };
+
+        // let Some(settings) = settings.
+        //     return Ok(());
+        // };
+
         // The bind_group gets created each frame.
         //
         // Normally, you would create a bind_group in the Queue set,
@@ -160,18 +233,25 @@ impl ViewNode for CloudRenderNode {
         // The reason it doesn't work is because each post_process_write will alternate the source/destination.
         // The only way to have the correct source/destination for the bind_group
         // is to make sure you get it during the node execution.
-        let bind_group = render_context.render_device().create_bind_group(
+        let post_process_bind_group = render_context.render_device().create_bind_group(
             "cloud_bind_group",
-            &cloud_pipeline.layout,
+            &cloud_pipeline.post_process_layout,
             // It's important for this to match the BindGroupLayout defined in the PostProcessPipeline
             &BindGroupEntries::sequential((
+                // View uniform
+                view_uniforms,
+                // Global light meta
+                light_binding,
                 // Make sure to use the source view
                 post_process.source,
                 // Use the sampler created for the pipeline
                 &cloud_pipeline.sampler,
-                // Set the settings binding
-                settings_binding.clone(),
                 // Volume texture
+                &texture.texture_view,
+                // Volume sampler
+                &texture.sampler,
+                // Cloud settings
+                settings_binding,
             )),
         );
 
@@ -191,7 +271,14 @@ impl ViewNode for CloudRenderNode {
         // This is mostly just wgpu boilerplate for drawing a fullscreen triangle,
         // using the pipeline/bind_group created above
         render_pass.set_render_pipeline(pipeline);
-        render_pass.set_bind_group(0, &bind_group, &[]);
+        render_pass.set_bind_group(
+            0,
+            &post_process_bind_group,
+            &[
+                view_uniform_offset.offset,
+                view_lights_uniform_offset.offset,
+            ],
+        );
         render_pass.draw(0..3, 0..1);
 
         Ok(())
@@ -201,7 +288,7 @@ impl ViewNode for CloudRenderNode {
 // This contains global data used by the render pipeline. This will be created once on startup.
 #[derive(Resource)]
 struct CloudPipeline {
-    layout: BindGroupLayout,
+    post_process_layout: BindGroupLayout,
     sampler: Sampler,
     pipeline_id: CachedRenderPipelineId,
 }
@@ -211,41 +298,80 @@ impl FromWorld for CloudPipeline {
         let render_device = world.resource::<RenderDevice>();
 
         // We need to define the bind group layout used for our pipeline
-        let layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("post_process_bind_group_layout"),
-            entries: &[
-                // The screen texture
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: true },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
+        let post_process_layout =
+            render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("cloud_bind_group_layout"),
+                entries: &[
+                    // The view uniform
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::VERTEX_FRAGMENT,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: true,
+                            min_binding_size: Some(ViewUniform::min_size()),
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                // The sampler that will be used to sample the screen texture
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                },
-                // The settings uniform that will control the effect
-                BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: bevy::render::render_resource::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: Some(CloudSettings::min_size()),
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: true,
+                            min_binding_size: Some(GpuLights::min_size()),
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                // Volume texture
-            ],
-        });
+                    // The screen texture
+                    BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    // The sampler that will be used to sample the screen texture
+                    BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    // The volume texture
+                    BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    // The sampler that will be used to sample the volume texture
+                    BindGroupLayoutEntry {
+                        binding: 5,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    // Cloud settings
+                    BindGroupLayoutEntry {
+                        binding: 6,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: Some(CloudSettings::min_size()),
+                        },
+                        count: None,
+                    },
+                ],
+            });
 
         // We can create the sampler here since it won't change at runtime and doesn't depend on the view
         let sampler = render_device.create_sampler(&SamplerDescriptor::default());
@@ -260,7 +386,7 @@ impl FromWorld for CloudPipeline {
             // This will add the pipeline to the cache and queue it's creation
             .queue_render_pipeline(RenderPipelineDescriptor {
                 label: Some("post_process_pipeline".into()),
-                layout: vec![layout.clone()],
+                layout: vec![post_process_layout.clone()],
                 // This will setup a fullscreen triangle for the vertex state
                 vertex: fullscreen_shader_vertex_state(),
                 fragment: Some(FragmentState {
@@ -284,35 +410,9 @@ impl FromWorld for CloudPipeline {
             });
 
         Self {
-            layout,
+            post_process_layout,
             sampler,
             pipeline_id,
         }
-    }
-}
-
-// This is the component that will get passed to the shader
-#[derive(Component, Default, Clone, Copy, ExtractComponent, ShaderType)]
-pub struct CloudSettings {
-    pub intensity: f32,
-    // WebGL2 structs must be 16 byte aligned.
-    #[cfg(feature = "webgl2")]
-    _webgl2_padding: Vec3,
-}
-
-// Change the intensity over time to show that the effect is controlled from the main world
-fn update_settings(mut settings: Query<&mut CloudSettings>, time: Res<Time>) {
-    for mut setting in &mut settings {
-        let mut intensity = time.elapsed_seconds().sin();
-        // Make it loop periodically
-        intensity = intensity.sin();
-        // Remap it to 0..1 because the intensity can't be negative
-        intensity = intensity * 0.5 + 0.5;
-        // Scale it to a more reasonable level
-        intensity *= 0.015;
-
-        // Set the intensity.
-        // This will then be extracted to the render world and uploaded to the gpu automatically by the [`UniformComponentPlugin`]
-        setting.intensity = intensity;
     }
 }
