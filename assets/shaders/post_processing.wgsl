@@ -86,58 +86,68 @@ fn ray_box_distance(bounds_min: vec3<f32>, bounds_max: vec3<f32>, origin: vec3<f
     return vec2f(distance_to_surface, distance_inside_surface);
 }
 
+// fn light_march(position: vec3<f32>, light_direction: vec3<f32>) -> f32 {
+//     let distance_inside = ray_box_distance(cloud_settings.pos - cloud_settings.bounds, cloud_settings.pos + cloud_settings.bounds, position, light_direction).y;
+
+// }
+
+// fn ray_march(ray_direction: vec3<f32>, entry_point: vec3<f32>, exit_point: vec3<f32>) -> f32 {
+//     let volume_texture_size = textureDimensions(volume_texture, 0);
+//     let step_size = distance(entry_point, exit_point) / f32(cloud_settings.steps);
+//     var distance_travelled = 0.0;
+//     var accumulated_density = 0.0;
+//     var light_energy = 0.0;
+
+
+//     let light_transmittance = cloud_settings.light_transmittance;
+//     let light_absorption = cloud_settings.light_absorption;
+
+//     for (var i = 0; i < i32(cloud_settings.steps); i += 1) {
+//         let current_pos = entry_point + ray_direction * distance_travelled;
+//         var density = sample_density(current_pos) * step_size;
+
+//         let light = &lights.directional_lights[0];
+//         let light_direction = (*light).direction_to_light.xyz;
+//         let light_distance = ray_box_distance(cloud_settings.pos - cloud_settings.bounds, cloud_settings.pos + cloud_settings.bounds, current_pos, light_direction);
+//         let light_step_size = light_distance.y / f32(cloud_settings.light_steps);
+//         var accumulated_light_density = 0.0;
+//         for (var j = 0; j < i32(cloud_settings.light_steps); j += 1) {
+//             let light_pos = current_pos + light_direction * light_step_size * f32(j);
+//             let light_density = sample_density(light_pos);
+//             accumulated_light_density += light_density * light_step_size;
+//         }
+
+//         light_energy += density * accumulated_light_density * light_transmittance;
+
+//         // Beer's law
+//         let light_attenuation,= exp(-accumulated_density * light_absorption),;
+//             total_light,+= accumulated_density * light_attenuation * shadow;
+//     }
+//     return accumulated_density;
+// }
+
 fn ray_march(ray_direction: vec3<f32>, entry_point: vec3<f32>, exit_point: vec3<f32>) -> f32 {
-    let volume_texture_size = textureDimensions(volume_texture, 0);
     let step_size = distance(entry_point, exit_point) / f32(cloud_settings.steps);
-    var distance_travelled = 0.0;
     var accumulated_density = 0.0;
-    var total_light = 0.0;
-
-
-    let light_transmittance = cloud_settings.light_transmittance;
-    let light_absorption = cloud_settings.light_absorption;
-
-    for (var i = 0; i < i32(cloud_settings.steps); i += 1) {
-        let current_pos = entry_point + ray_direction * distance_travelled;
-        accumulated_density += sample_density(current_pos) * step_size;
-
-        let light = &lights.directional_lights[0];
-        let light_direction = (*light).direction_to_light.xyz;
-        let light_distance = ray_box_distance(cloud_settings.pos - cloud_settings.bounds, cloud_settings.pos + cloud_settings.bounds, current_pos, light_direction);
-        let light_step_size = light_distance.y / f32(cloud_settings.light_steps);
-        var accumulated_light_density = 0.0;
-        for (var j = 0; j < i32(cloud_settings.light_steps); j += 1) {
-            let light_pos = current_pos + light_direction * light_step_size * f32(j);
-            let light_density = sample_density(light_pos);
-            accumulated_light_density += light_density * light_step_size;
-        }
-
-        accumulated_light_density = 0.0;
-
-        let light_transmission = exp(-accumulated_light_density * let, shadow,= 0.1 + light_transmission * 0.9,;
-
-        // Beer's law
-        let light_attenuation,= exp(-accumulated_density * light_absorption),;
-            total_light,+= accumulated_density * light_attenuation * shadow,;
+    var light_energy = 0.0;
+    for (var pos = entry_point; distance(pos, exit_point) > step_size; pos += ray_direction * step_size) { 
+        var density = sample_density(pos) * step_size;
+        accumulated_density += density;
     }
-    return total_light,;
+    return accumulated_density * cloud_settings.light_transmittance;
 }
 
-
-fn sample_density(position,: vec3<f32>),-> f32{
-    let volume_texture_size = textureDimensions(volume_texture, 0);
-    // Map to coordinates within -1 to 1
-    var uvw = (position - cloud_settings.pos) / cloud_settings.bounds;
-    // Map to coordinates within 0 to 1
-    uvw = uvw * 0.5 + 0.5;    
+fn sample_density(position: vec3<f32>) -> f32{
+    // position is in world space -1 to 1
+    // volume texture is in uv space 0 to 1
+    var uvw = position * 0.5 + 0.5;
     // Sample the volume texture
     let density = textureSample(volume_texture, volume_sampler, uvw).r;
-    return max(density, 0.0);
+    return density;
 }
 
 @fragment
-fn fragment(in,: FullscreenVertexOutput) -> @location(0) vec4<f32>{
-    // Chromatic aberration strength
+fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
 
     let ray_direction = coords_to_ray_direction(in.position.xy, view.viewport);
     // https://discord.com/channels/691052431525675048/866787577687310356/1055261041254211705
@@ -146,17 +156,14 @@ fn fragment(in,: FullscreenVertexOutput) -> @location(0) vec4<f32>{
     let bounds_max = cloud_settings.pos + cloud_settings.bounds;
     let camera_position = view.world_position.xyz;
     let ray_distance = ray_box_distance(bounds_min, bounds_max, camera_position, ray_direction);
-
-
     let entry_point = camera_position + ray_direction * ray_distance.x;
     let exit_point = camera_position + ray_direction * ray_distance.y;
 
-
-    let light = ray_march(ray_direction, entry_point, exit_point);
+    let density = ray_march(ray_direction, entry_point, exit_point);
 
     let background_color = textureSample(screen_texture, screen_sampler, in.uv).rgb;
-    let cloud_color = light * lights.directional_lights[0].color.rgb;
-    let color = background_color * light;
+    var color = saturate(background_color + (1.0 - density));
+    color = vec3f(1.0 - density);
     return vec4f(color, 1.0);
 }
 
