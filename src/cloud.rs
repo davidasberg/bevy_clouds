@@ -39,10 +39,9 @@ struct CloudVolume {
 #[derive(Component, Default, Clone, ExtractComponent, Copy, ShaderType, Reflect)]
 #[reflect(Component)]
 pub struct CloudSettings {
-    // The position of the cloud volume
-    pub pos: Vec3,
     // The size of the cloud volume
-    pub bounds: Vec3,
+    pub bounds_min: Vec3,
+    pub bounds_max: Vec3,
     // The number of steps to take when raymarching
     pub steps: u32,
     // The number of steps to take when raymarching the light
@@ -62,13 +61,13 @@ fn load_volume(asset_server: Res<AssetServer>, mut commands: Commands) {
     commands.insert_resource(CloudVolume { image });
     commands.spawn((
         CloudSettings {
-            pos: Vec3::new(0.0, 0.0, 0.0),
-            bounds: Vec3::new(1.0, 1.0, 1.0),
+            bounds_min: Vec3::new(-1.0, -1.0, -1.0),
+            bounds_max: Vec3::new(1.0, 1.0, 1.0),
             steps: 32,
             light_steps: 8,
-            light_absorption: 1.6,
+            light_absorption: 1.05,
             light_transmittance: 0.1,
-            light_absorption_sun: 1.05,
+            light_absorption_sun: 1.0,
             darkness_threshold: 0.28,
         },
         Name::new("cloud_settings"),
