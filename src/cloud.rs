@@ -1,3 +1,5 @@
+use std::{fs::File, io::BufReader};
+
 use bevy::{
     core_pipeline::{core_3d, fullscreen_vertex_shader::fullscreen_shader_vertex_state},
     ecs::query::QueryItem,
@@ -16,19 +18,23 @@ use bevy::{
         render_resource::{
             AsBindGroup, BindGroupEntries, BindGroupLayout, BindGroupLayoutDescriptor,
             BindGroupLayoutEntry, BindingType, BufferBindingType, CachedRenderPipelineId,
-            ColorTargetState, ColorWrites, FragmentState, IntoBinding, MultisampleState,
-            Operations, PipelineCache, PrimitiveState, RenderPassColorAttachment,
-            RenderPassDescriptor, RenderPipelineDescriptor, Sampler, SamplerBindingType,
-            SamplerDescriptor, ShaderStages, ShaderType, TextureFormat, TextureSampleType,
-            TextureViewDimension, UniformBuffer,
+            ColorTargetState, ColorWrites, Extent3d, FragmentState, ImageCopyTexture,
+            ImageDataLayout, IntoBinding, MultisampleState, Operations, Origin3d, PipelineCache,
+            PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor,
+            RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages,
+            ShaderType, Texture, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
+            TextureSampleType, TextureUsages, TextureViewDimension, UniformBuffer,
         },
-        renderer::{RenderContext, RenderDevice},
+        renderer::{RenderContext, RenderDevice, RenderQueue},
         settings,
         texture::BevyDefault,
         view::{ViewTarget, ViewUniform, ViewUniformOffset, ViewUniforms},
         RenderApp,
     },
 };
+use vdb_rs::VdbReader;
+
+use crate::{volume::loader::VolumeLoaderError, MainCamera};
 
 #[derive(Resource, ExtractResource, Default, Clone)]
 struct CloudVolume {
@@ -57,7 +63,7 @@ pub struct CloudSettings {
 }
 
 fn load_volume(asset_server: Res<AssetServer>, mut commands: Commands) {
-    let image: Handle<Image> = asset_server.load("volumes/wdas_cloud_sixteenth.vdb");
+    let image: Handle<Image> = asset_server.load("volumes/wdas_cloud_half.vdb");
     commands.insert_resource(CloudVolume { image });
     commands.spawn((
         CloudSettings {
@@ -87,7 +93,6 @@ impl Plugin for CloudRenderPlugin {
 
         app.add_systems(Startup, load_volume);
         app.register_type::<CloudSettings>();
-
         // We need to get the render app from the main app
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
@@ -170,6 +175,8 @@ impl ViewNode for CloudRenderNode {
         (view_target, view_uniform_offset, view_lights_uniform_offset): QueryItem<Self::ViewQuery>,
         world: &World,
     ) -> Result<(), NodeRunError> {
+        // info!("Running cloud render node");
+
         // Get the pipeline resource that contains the global data we need
         // to create the render pipeline
         let cloud_pipeline = world.resource::<CloudPipeline>();
@@ -195,15 +202,6 @@ impl ViewNode for CloudRenderNode {
             return Ok(());
         };
 
-        // This will start a new "post process write", obtaining two texture
-        // views from the view target - a `source` and a `destination`.
-        // `source` is the "current" main texture and you _must_ write into
-        // `destination` because calling `post_process_write()` on the
-        // [`ViewTarget`] will internally flip the [`ViewTarget`]'s main
-        // texture to the `destination` texture. Failing to do so will cause
-        // the current main texture information to be lost.
-        let post_process = view_target.post_process_write();
-
         let Some(cloud) = world.get_resource::<CloudVolume>() else {
             return Ok(());
         };
@@ -212,9 +210,18 @@ impl ViewNode for CloudRenderNode {
             .resource::<RenderAssets<Image>>()
             .get(cloud.image.clone())
         else {
-            info!("Resource exists but is not loaded yet");
+            // info!("Resource exists but is not loaded yet");
             return Ok(());
         };
+
+        // This will start a new "post process write", obtaining two texture
+        // views from the view target - a `source` and a `destination`.
+        // `source` is the "current" main texture and you _must_ write into
+        // `destination` because calling `post_process_write()` on the
+        // [`ViewTarget`] will internally flip the [`ViewTarget`]'s main
+        // texture to the `destination` texture. Failing to do so will cause
+        // the current main texture information to be lost.
+        let post_process = view_target.post_process_write();
 
         let settings_uniforms = world.resource::<ComponentUniforms<CloudSettings>>();
         let Some(settings_binding) = settings_uniforms.uniforms().binding() else {
@@ -376,9 +383,7 @@ impl FromWorld for CloudPipeline {
         let sampler = render_device.create_sampler(&SamplerDescriptor::default());
 
         // Get the shader handle
-        let shader = world
-            .resource::<AssetServer>()
-            .load("shaders/post_processing.wgsl");
+        let shader = world.resource::<AssetServer>().load("shaders/clouds.wgsl");
 
         let pipeline_id = world
             .resource_mut::<PipelineCache>()

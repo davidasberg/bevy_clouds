@@ -75,7 +75,7 @@ fn main() {
         .add_plugins((
             DefaultPlugins,
             CustomMaterialPlugin,
-            bevy_editor_pls::EditorPlugin::new(),
+            // bevy_editor_pls::EditorPlugin::new(),
             CloudRenderPlugin,
         ))
         .init_asset_loader::<volume::loader::VolumeLoader>()
@@ -83,6 +83,9 @@ fn main() {
         .add_systems(Update, (camera_controller, draw_cube_gizmo, rotate_light))
         .run();
 }
+
+#[derive(Component)]
+struct MainCamera;
 
 fn camera_controller(
     time: Res<Time>,
@@ -161,10 +164,13 @@ fn setup(
         ..default()
     });
 
-    commands.spawn((Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 2.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    },));
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_xyz(0.0, 2.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+            ..default()
+        },
+        MainCamera,
+    ));
 
     commands.spawn((PbrBundle {
         transform: Transform::from_xyz(0.0, -1.0, 0.0),

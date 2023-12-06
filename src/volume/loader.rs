@@ -4,6 +4,7 @@ use bevy::{
     asset::{io::Reader, AssetLoader, AsyncReadExt, LoadContext},
     input::gamepad,
     log::info,
+    math::IVec3,
     render::{
         render_resource::{encase::internal::BufferRef, Extent3d, TextureDimension, TextureFormat},
         texture::Image,
@@ -49,7 +50,9 @@ impl AssetLoader for VolumeLoader {
             let grid = vdb_reader.read_grid::<half::f16>(&grid_to_load)?;
             let aabb_max = grid.descriptor.aabb_max()?;
             let aabb_min = grid.descriptor.aabb_min()?;
-            let aabb = aabb_max - aabb_min;
+
+            let aabb = aabb_max - aabb_min + IVec3::new(1, 1, 1);
+            dbg!(aabb);
             let size: Extent3d = Extent3d {
                 width: aabb.x as u32,
                 height: aabb.y as u32,
@@ -70,9 +73,10 @@ impl AssetLoader for VolumeLoader {
 
             // Iterate over the grid and fill the pixels
             grid.iter().for_each(|(pos, value)| {
-                let x = pos.x as usize;
-                let y = pos.y as usize;
-                let z = pos.z as usize;
+                let x = (pos.x - aabb_min.x as f32) as usize;
+                let y = (pos.y - aabb_min.y as f32) as usize;
+                let z = (pos.z - aabb_min.z as f32) as usize;
+                // info!("x: {}, y: {}, z: {}", x, y, z);
                 pixels[x][y][z] = value;
             });
 
