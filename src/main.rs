@@ -75,7 +75,7 @@ fn main() {
         .add_plugins((
             DefaultPlugins,
             CustomMaterialPlugin,
-            // bevy_editor_pls::EditorPlugin::new(),
+            bevy_editor_pls::EditorPlugin::new(),
             CloudRenderPlugin,
         ))
         .init_asset_loader::<volume::loader::VolumeLoader>()

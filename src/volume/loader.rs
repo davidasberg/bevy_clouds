@@ -6,8 +6,11 @@ use bevy::{
     log::info,
     math::IVec3,
     render::{
-        render_resource::{encase::internal::BufferRef, Extent3d, TextureDimension, TextureFormat},
-        texture::Image,
+        render_resource::{
+            encase::internal::BufferRef, Extent3d, TextureDescriptor, TextureDimension,
+            TextureFormat, TextureUsages,
+        },
+        texture::{Image, ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
     },
     utils::BoxedFuture,
 };
@@ -59,17 +62,14 @@ impl AssetLoader for VolumeLoader {
                 depth_or_array_layers: aabb.z as u32,
             };
 
-            // grid currently contains only voxels that are not "empty"
-            // we need to convert it to a Vec<u8> with the correct size
-            // Initialize the 3d pixel array, with 0s
-            let mut pixels: Vec<Vec<Vec<half::f16>>> =
-                vec![
-                    vec![
-                        vec![f16::from_f32(0.0); size.depth_or_array_layers as usize];
-                        size.height as usize
-                    ];
-                    size.width as usize
-                ];
+            dbg!(isize::MAX);
+
+            let mut image_data: Vec<u8> = Vec::new();
+            image_data.resize(
+                (size.width as u64 * size.height as u64 * size.depth_or_array_layers as u64 * 2)
+                    as usize,
+                0,
+            );
 
             // Iterate over the grid and fill the pixels
             grid.iter().for_each(|(pos, value)| {
@@ -77,20 +77,38 @@ impl AssetLoader for VolumeLoader {
                 let y = (pos.y - aabb_min.y as f32) as usize;
                 let z = (pos.z - aabb_min.z as f32) as usize;
                 // info!("x: {}, y: {}, z: {}", x, y, z);
-                pixels[x][y][z] = value;
+                let index =
+                    (x + y * size.width as usize + z * size.width as usize * size.height as usize)
+                        * 2;
+                let bytes = half::f16::to_ne_bytes(value);
+                image_data[index] = bytes[0];
+                image_data[index + 1] = bytes[1];
             });
 
-            // Convert the pixels to a 1d array of u8's
-            let pixel = pixels
-                .into_iter()
-                .flatten()
-                .flatten()
-                .map(|v| half::f16::to_ne_bytes(v))
-                .flatten()
-                .collect::<Vec<u8>>();
-
-            // Create the image
-            let image = Image::new(size, TextureDimension::D3, pixel, TextureFormat::R16Float);
+            let mut image = Image::default();
+            let image_sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                label: None,
+                address_mode_u: ImageAddressMode::ClampToEdge,
+                address_mode_v: ImageAddressMode::ClampToEdge,
+                address_mode_w: ImageAddressMode::ClampToEdge,
+                mag_filter: ImageFilterMode::Linear,
+                min_filter: ImageFilterMode::Linear,
+                mipmap_filter: ImageFilterMode::Linear,
+                ..Default::default()
+            });
+            image.sampler = image_sampler;
+            image.texture_descriptor = TextureDescriptor {
+                size,
+                dimension: TextureDimension::D3,
+                format: TextureFormat::R16Float,
+                mip_level_count: 1,
+                sample_count: 1,
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+                label: None,
+                view_formats: &[],
+            };
+            image.data = image_data;
+            image.reinterpret_size(size);
 
             Ok(image)
         })

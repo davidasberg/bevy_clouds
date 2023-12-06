@@ -77,7 +77,7 @@ fn pixel_to_ray_direction(pixel_uv: vec2<f32>) -> vec3<f32> {
     return normalize((primary_ray_target.xyz / primary_ray_target.w) - view.world_position);
 }
 
-// Returns (distance_to_surface, distance_inside_surface)
+// Returns (distance_to_box, distance_inside_box)
 fn ray_box_distance(bounds_min: vec3f, bounds_max: vec3f, origin: vec3f, direction: vec3f) -> vec2f {
 
     // CASE 1: ray intersects box from outside (0 <= dstA <= dstB)
@@ -96,87 +96,52 @@ fn ray_box_distance(bounds_min: vec3f, bounds_max: vec3f, origin: vec3f, directi
     let dstA = max(max(tmin.x, tmin.y), tmin.z);
     let dstB = min(min(tmax.x, tmax.y), tmax.z);
 
-    return vec2f(dstA, dstB);
+    let distance_to_box = max(dstA, 0.0);
+    let distance_inside_box = max(dstB - distance_to_box, 0.0);
+    return vec2f(distance_to_box, distance_inside_box);
 
 }
-
-
 
 fn sample_density(position: vec3<f32>) -> f32 {
     // position is in world space -1 to 1
     // volume texture is in uv space 0 to 1
-    var density = 0.0;
-    if position.x < -1.0 || position.x > 1.0 || position.y < -1.0 || position.y > 1.0 || position.z < -1.0 || position.z > 1.0 {
-       density = 0.0;
-    }else {
-        let uvw = position * 0.5 + 0.5;
-        // Sample the volume texture    
-        density = textureSample(volume_texture, volume_sampler, uvw).r;
-    }
-    return density;
-}
-
-fn debug_draw_density(uv: vec2<f32>) -> vec4<f32> {
-    var channels = vec4f(0.0);
-    let depth = 0.0;
-    let dimensions = textureDimensions(volume_texture, 0);
-    let sample_pos = vec3f(uv * vec2f(dimensions.xy), depth);
-
-    channels = textureSample(volume_texture, volume_sampler, sample_pos);
-
-    return channels;
+    var uvw = (position - cloud_settings.bounds_min) / (cloud_settings.bounds_max - cloud_settings.bounds_min);
+    // Sample the volume texture
+    let density = textureSample(volume_texture, volume_sampler, uvw).x;
+    return max(density, 0.0);
 }
 
 @fragment
 fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
-    
-
     // https://discord.com/channels/691052431525675048/866787577687310356/1055261041254211705
-    var ray_direction = pixel_to_ray_direction(in.uv);
-
-    let bounds_min = cloud_settings.bounds_min;
-    let bounds_max = cloud_settings.bounds_max;
-    let camera_position = view.world_position.xyz;
-
-    let ray_distance = ray_box_distance(bounds_min, bounds_max, camera_position, ray_direction);
-    let to_box = ray_distance.x;
-    let inside_box = ray_distance.y - ray_distance.x;
-    let entry_point = camera_position + ray_direction * ray_distance.x;
-    let exit_point = camera_position + ray_direction * ray_distance.y;
-
-
-
-    let step_size = ray_distance.y / f32(cloud_settings.steps);
-    var density = 0.0;
-
-    var distance_limit = ray_distance.y;
-    var distance_traveled = 0.0;
+    var ray_origin = view.world_position;
+    var ray_direction = pixel_to_ray_direction(saturate(in.uv));
+    var ray_distance = ray_box_distance(cloud_settings.bounds_min, cloud_settings.bounds_max, ray_origin, ray_direction);
+    let distance_to_box = ray_distance.x;
+    let distance_inside_box = ray_distance.y;
+    let entry_point = ray_origin + ray_direction * distance_to_box;
+    var distance_travelled = 0.0;
+    let distance_limit = distance_inside_box;
+    let step_size = distance_limit / f32(cloud_settings.steps);
     var light_energy = 0.0;
     var transmittance = 1.0;
-    while distance_traveled < distance_limit {
-        let position = entry_point + ray_direction * distance_traveled;
-        let density_sample = sample_density(position);
-        if density_sample > 0.0 {
-            light_energy += density_sample * step_size * cloud_settings.light_transmittance;
-            transmittance *= exp(-density_sample * step_size * cloud_settings.light_absorption);
-        }
+    while distance_travelled < distance_limit {
+        let position = entry_point + ray_direction * distance_travelled;
+        let density = sample_density(position);
+        if density > 0.0 {
+            let light_transmittance = exp(-cloud_settings.light_absorption_sun);
+            light_energy += density * step_size * transmittance * light_transmittance;
+            transmittance *= exp(-density * step_size * cloud_settings.light_absorption);
 
-        if transmittance < 0.01 {
-            break;
+            if transmittance < 0.01 {
+                break;
+            }
         }
-
-        distance_traveled += step_size;
+        distance_travelled += step_size;
     }
-
+    // Calculate light absorption
     let background_color = textureSample(screen_texture, screen_sampler, in.uv).rgb;
     let cloud_color = light_energy * lights.directional_lights[0].color.rgb;
-    var color = background_color * transmittance + cloud_color * (1.0 - transmittance);
-    color = saturate(color);
-    if inside_box < 0.0 {
-        color = vec3f(0.0, 0.0, 0.0);
-    }
-    return vec4f(color, 1.0);
-
-    // return vec4f(textureSample(volume_texture, volume_sampler, vec3f(in.uv, f32(cloud_settings.steps) / 100.0)).rgb, 1.0);
+    let color = background_color * transmittance + cloud_color;
+    return vec4f(color, 0.0);
 }
-
