@@ -36,14 +36,21 @@
 @group(0) @binding(6) var<uniform> cloud_settings: CloudSettings;
 
 
+const PI = 3.1415926535;
+
 struct CloudSettings {
     bounds_min: vec3f,
     bounds_max: vec3f,
     steps: u32,
     light_steps: u32,
     light_absorption: f32,
-    light_transmittance: f32,
     light_absorption_sun: f32,
+    darkness_threshold: f32,
+    ray_offset_strength: f32,
+    forward_scattering: f32,
+    back_scattering: f32,
+    base_brightness: f32,
+    phase_factor: f32,
 }
 
 fn coords_to_ray_direction(position: vec2f, viewport: vec4f) -> vec3f {
@@ -111,6 +118,45 @@ fn sample_density(position: vec3<f32>) -> f32 {
     return max(density, 0.0);
 }
 
+fn light_march(position: vec3f) -> f32 {
+    let dir_to_light = lights.directional_lights[0].direction_to_light;
+    let ray_distance = ray_box_distance(cloud_settings.bounds_min, cloud_settings.bounds_max, position, dir_to_light);
+    let distance_inside_box = ray_distance.y;
+
+    let step_size = distance_inside_box / f32(cloud_settings.light_steps);
+    var distance_travelled = 0.0;
+    var total_density = 0.0;
+    while distance_travelled < distance_inside_box {
+        let position = position + dir_to_light * distance_travelled;
+        let density = sample_density(position);
+        total_density += max(0.0,density * step_size);
+        distance_travelled += step_size;
+    }
+
+    let transmittance = exp(-total_density * cloud_settings.light_absorption_sun);
+    return cloud_settings.darkness_threshold + transmittance * (1.0 - cloud_settings.darkness_threshold);
+}
+
+fn random(st: vec2f) -> f32 {
+    return fract(sin(dot(st, vec2(12.9898, 78.233))) * 43758.5453123);
+}
+
+
+fn henyey_greenstein_phase_function(cos_theta: f32, g: f32) -> f32 {
+    let g2 = g * g;
+    let denom = 4.0 * PI * pow(1.0+ g2- 2.0 * g * cos_theta, 1.5); 
+}
+
+fn phase_function(cos_theta: f32) -> f32 {
+    let blend = 0.5;
+    let forward_scattering = cloud_settings.forward_scattering;
+    let back_scattering = cloud_settings.back_scattering;
+    let base_brightness = cloud_settings.base_brightness;
+    let phase_factor = cloud_settings.phase_factor;
+    let hg_blend = henyey_greenstein_phase_function(cos_theta, forward_scattering) * (1.0-blend) + henyey_greenstein_phase_function(cos_theta, -back_scattering) * blend;
+    return base_brightness + phase_factor * hg_blend;
+}
+
 @fragment
 fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     // https://discord.com/channels/691052431525675048/866787577687310356/1055261041254211705
@@ -120,7 +166,13 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let distance_to_box = ray_distance.x;
     let distance_inside_box = ray_distance.y;
     let entry_point = ray_origin + ray_direction * distance_to_box;
-    var distance_travelled = 0.0;
+    
+    let random_offset = random(in.uv) * cloud_settings.ray_offset_strength;
+    var distance_travelled = random_offset;
+
+    let cos_theta = dot(ray_direction, lights.directional_lights[0].direction_to_light);
+    let phase_value = phase_function(cos_theta);
+    
     let distance_limit = distance_inside_box;
     let step_size = distance_limit / f32(cloud_settings.steps);
     var light_energy = 0.0;
@@ -129,8 +181,8 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         let position = entry_point + ray_direction * distance_travelled;
         let density = sample_density(position);
         if density > 0.0 {
-            let light_transmittance = exp(-cloud_settings.light_absorption_sun);
-            light_energy += density * step_size * transmittance * light_transmittance;
+            let light_transmittance = light_march(position);
+            light_energy += density * step_size * transmittance * light_transmittance * phase_value;
             transmittance *= exp(-density * step_size * cloud_settings.light_absorption);
 
             if transmittance < 0.01 {

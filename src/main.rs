@@ -9,10 +9,12 @@ mod cloud;
 mod volume;
 
 use bevy::{
+    asset::LoadState,
     core_pipeline::{
         clear_color::ClearColorConfig,
         core_3d::{self, Transparent3d},
         fullscreen_vertex_shader::fullscreen_shader_vertex_state,
+        Skybox,
     },
     ecs::{
         query::QueryItem,
@@ -45,8 +47,9 @@ use bevy::{
             PipelineCache, PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor,
             RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages,
             ShaderType, SpecializedMeshPipeline, SpecializedMeshPipelineError,
-            SpecializedMeshPipelines, TextureFormat, TextureSampleType, TextureViewDimension,
-            VertexAttribute, VertexBufferLayout, VertexFormat, VertexStepMode,
+            SpecializedMeshPipelines, TextureFormat, TextureSampleType, TextureViewDescriptor,
+            TextureViewDimension, VertexAttribute, VertexBufferLayout, VertexFormat,
+            VertexStepMode,
         },
         renderer::{RenderContext, RenderDevice},
         texture::BevyDefault,
@@ -80,7 +83,15 @@ fn main() {
         ))
         .init_asset_loader::<volume::loader::VolumeLoader>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (camera_controller, draw_cube_gizmo, rotate_light))
+        .add_systems(
+            Update,
+            (
+                camera_controller,
+                // draw_cube_gizmo,
+                rotate_light,
+                skybox_loaded,
+            ),
+        )
         .run();
 }
 
@@ -158,7 +169,13 @@ fn setup(
     images: Res<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
+    let skybox_handle = asset_server.load("textures/StandardCubeMap.png");
+    commands.insert_resource(SkyboxTexture {
+        image: skybox_handle.clone(),
+    });
+
     commands.spawn(DirectionalLightBundle {
         transform: Transform::from_xyz(0.0, 8.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
@@ -170,6 +187,7 @@ fn setup(
             ..default()
         },
         MainCamera,
+        // Skybox(skybox_handle),
     ));
 
     commands.spawn((PbrBundle {
@@ -181,6 +199,29 @@ fn setup(
         material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
         ..Default::default()
     },));
+}
+
+#[derive(Resource)]
+struct SkyboxTexture {
+    image: Handle<Image>,
+}
+
+fn skybox_loaded(
+    asset_server: Res<AssetServer>,
+    mut images: ResMut<Assets<Image>>,
+    mut skybox_texture: ResMut<SkyboxTexture>,
+    mut skyboxes: Query<&mut Skybox>,
+) {
+    if asset_server.load_state(&skybox_texture.image) == LoadState::Loaded {
+        let image = images.get_mut(&skybox_texture.image).unwrap();
+        if image.texture_descriptor.array_layer_count() == 1 {
+            image.reinterpret_stacked_2d_as_array(image.height() / image.width());
+            image.texture_view_descriptor = Some(TextureViewDescriptor {
+                dimension: Some(TextureViewDimension::Cube),
+                ..default()
+            });
+        }
+    }
 }
 
 /// Set up a simple 3D scene
