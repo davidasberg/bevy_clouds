@@ -5,6 +5,7 @@
 //!
 //! This is a fairly low level example and assumes some familiarity with rendering concepts and wgpu.
 
+mod camera_controller;
 mod cloud;
 mod volume;
 
@@ -61,107 +62,29 @@ use bevy::{
 
 use bytemuck::{Pod, Zeroable};
 
+use camera_controller::{PanOrbitCamera, PanOrbitCameraPlugin};
 use vdb_rs::VdbReader;
 
 use std::{error::Error, fs::File, io::BufReader};
 
 use cloud::{CloudRenderPlugin, CloudSettings};
 
-/// TODO:
-///                                     DONE    IN PROGRESS      TODO
-/// 1. Add a way to load a volume       [X]       [ ]             [ ]
-/// 2. Move volumetric texture to shader[ ]       [ ]             [x]
-/// 3. Raymarch volumetric texture      [ ]       [ ]             [x]
-
 fn main() {
     App::new()
-        .add_plugins((
-            DefaultPlugins,
-            CustomMaterialPlugin,
-            bevy_editor_pls::EditorPlugin::new(),
-            CloudRenderPlugin,
-        ))
+        .add_plugins((DefaultPlugins, PanOrbitCameraPlugin, CloudRenderPlugin))
         .init_asset_loader::<volume::loader::VolumeLoader>()
         .add_systems(Startup, setup)
-        .add_systems(
-            Update,
-            (
-                camera_controller,
-                // draw_cube_gizmo,
-                rotate_light,
-                skybox_loaded,
-            ),
-        )
+        .add_systems(Update, (rotate_light, skybox_loaded))
         .run();
 }
 
 #[derive(Component)]
 struct MainCamera;
 
-fn camera_controller(
-    time: Res<Time>,
-    keyboard_input: Res<Input<KeyCode>>,
-    mut query: Query<&mut Transform, With<Camera3d>>,
-) {
-    for mut transform in &mut query {
-        let mut translation = Vec3::ZERO;
-        let speed = 1.0;
-        let rotation_speed = 1.0;
-        if keyboard_input.pressed(KeyCode::W) {
-            translation += transform.forward();
-        }
-        if keyboard_input.pressed(KeyCode::S) {
-            translation -= transform.forward();
-        }
-        if keyboard_input.pressed(KeyCode::A) {
-            translation -= transform.right();
-        }
-        if keyboard_input.pressed(KeyCode::D) {
-            translation += transform.right();
-        }
-        if keyboard_input.pressed(KeyCode::Space) {
-            translation += transform.up();
-        }
-        if keyboard_input.pressed(KeyCode::ShiftLeft) {
-            translation -= transform.up();
-        }
-        if keyboard_input.pressed(KeyCode::Left) {
-            transform.rotate(Quat::from_rotation_y(rotation_speed * time.delta_seconds()));
-        }
-
-        let up = Vec3::Y;
-        let right = transform.right();
-
-        if keyboard_input.pressed(KeyCode::Right) {
-            transform.rotate_axis(up, -rotation_speed * time.delta_seconds());
-        }
-        if keyboard_input.pressed(KeyCode::Left) {
-            transform.rotate_axis(up, rotation_speed * time.delta_seconds());
-        }
-
-        if keyboard_input.pressed(KeyCode::Up) {
-            transform.rotate_axis(right, rotation_speed * time.delta_seconds());
-        }
-        if keyboard_input.pressed(KeyCode::Down) {
-            transform.rotate_axis(right, -rotation_speed * time.delta_seconds());
-        }
-
-        if translation.length_squared() > 0.0 {
-            transform.translation += translation.normalize() * speed * time.delta_seconds();
-        }
-    }
-}
-
 fn rotate_light(time: Res<Time>, mut query: Query<&mut Transform, With<DirectionalLight>>) {
     for mut transform in &mut query {
         transform.rotate(Quat::from_rotation_y(time.delta_seconds()));
     }
-}
-fn draw_cube_gizmo(mut gizmos: Gizmos) {
-    gizmos.cuboid(Transform::from_scale(Vec3::splat(2.)), Color::RED);
-
-    // origin
-    gizmos.sphere(Vec3::ZERO, Quat::IDENTITY, 0.1, Color::RED);
 }
 
 fn setup(
@@ -187,6 +110,7 @@ fn setup(
             ..default()
         },
         MainCamera,
+        PanOrbitCamera::default(),
         // Skybox(skybox_handle),
     ));
 
@@ -221,309 +145,5 @@ fn skybox_loaded(
                 ..default()
             });
         }
-    }
-}
-
-/// Set up a simple 3D scene
-fn setup_old(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let filename = "assets/volumes/wdas_cloud_sixteenth.vdb";
-    let f = File::open(filename).unwrap();
-    let mut vdb_reader = VdbReader::new(BufReader::new(f)).unwrap();
-    let grid_names = vdb_reader.available_grids();
-
-    let grid_to_load = grid_names.first().cloned().unwrap_or(String::new());
-
-    let grid = vdb_reader.read_grid::<half::f16>(&grid_to_load).unwrap();
-    let aabb_max = grid.descriptor.aabb_max().unwrap();
-    let aabb_min = grid.descriptor.aabb_min().unwrap();
-    let aabb = (aabb_max - aabb_min).as_vec3();
-    let center = (aabb_max + aabb_min).as_vec3() / 2.0;
-    let scale = 1.0 / aabb.max_element();
-
-    // we want the center of the grid to be at the origin
-    // and the largest extent to be 1
-
-    // find min max voxel values
-    let min = grid
-        .iter()
-        .fold(half::f16::MAX, |acc, (_, voxel)| acc.min(voxel));
-
-    let max = grid
-        .iter()
-        .fold(half::f16::MIN, |acc, (_, voxel)| acc.max(voxel));
-
-    let instances: Vec<(Vec3, half::f16)> = grid
-        .iter()
-        .map(|(pos, voxel)| {
-            // center and scale
-            let pos = (pos - center) * scale;
-            // normalize voxel value
-            let voxel = (voxel - min) / (max - min);
-            (pos, voxel)
-        })
-        .collect();
-
-    println!("aabb: {:?}", aabb);
-
-    // scale to 1x1x1 cube
-
-    commands.spawn((
-        meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-        SpatialBundle::INHERITED_IDENTITY,
-        InstanceMaterialData(
-            instances
-                .iter()
-                .map(|&(pos, voxel)| InstanceData {
-                    position: pos,
-                    scale,
-                    color: Color::rgb(
-                        1.0 - voxel.to_f32(),
-                        1.0 - voxel.to_f32(),
-                        1.0 - voxel.to_f32(),
-                    )
-                    .as_rgba_f32(),
-                })
-                .collect(),
-        ),
-        NoFrustumCulling,
-    ));
-
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
-            intensity: 1500.0,
-            shadows_enabled: true,
-            ..default()
-        },
-        transform: Transform::from_xyz(0.0, 8.0, 4.0),
-        ..default()
-    });
-
-    commands.spawn((Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 2.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    },));
-}
-
-#[derive(Component, Deref)]
-struct InstanceMaterialData(Vec<InstanceData>);
-
-impl ExtractComponent for InstanceMaterialData {
-    type Query = &'static InstanceMaterialData;
-    type Filter = ();
-    type Out = Self;
-
-    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self> {
-        Some(InstanceMaterialData(item.0.clone()))
-    }
-}
-
-pub struct CustomMaterialPlugin;
-
-impl Plugin for CustomMaterialPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugins(ExtractComponentPlugin::<InstanceMaterialData>::default());
-        app.sub_app_mut(RenderApp)
-            .add_render_command::<Transparent3d, DrawCustom>()
-            .init_resource::<SpecializedMeshPipelines<CustomPipeline>>()
-            .add_systems(
-                Render,
-                (
-                    queue_custom.in_set(RenderSet::QueueMeshes),
-                    prepare_instance_buffers.in_set(RenderSet::PrepareResources),
-                ),
-            );
-    }
-
-    fn finish(&self, app: &mut App) {
-        app.sub_app_mut(RenderApp).init_resource::<CustomPipeline>();
-    }
-}
-
-#[derive(Clone, Copy, Pod, Zeroable)]
-#[repr(C)]
-struct InstanceData {
-    position: Vec3,
-    scale: f32,
-    color: [f32; 4],
-}
-
-#[allow(clippy::too_many_arguments)]
-fn queue_custom(
-    transparent_3d_draw_functions: Res<DrawFunctions<Transparent3d>>,
-    custom_pipeline: Res<CustomPipeline>,
-    msaa: Res<Msaa>,
-    mut pipelines: ResMut<SpecializedMeshPipelines<CustomPipeline>>,
-    pipeline_cache: Res<PipelineCache>,
-    meshes: Res<RenderAssets<Mesh>>,
-    render_mesh_instances: Res<RenderMeshInstances>,
-    material_meshes: Query<Entity, With<InstanceMaterialData>>,
-    mut views: Query<(&ExtractedView, &mut RenderPhase<Transparent3d>)>,
-) {
-    let draw_custom = transparent_3d_draw_functions.read().id::<DrawCustom>();
-
-    let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
-
-    for (view, mut transparent_phase) in &mut views {
-        let view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
-        let rangefinder = view.rangefinder3d();
-        for entity in &material_meshes {
-            let Some(mesh_instance) = render_mesh_instances.get(&entity) else {
-                continue;
-            };
-            let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id) else {
-                continue;
-            };
-            let key = view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology);
-            let pipeline = pipelines
-                .specialize(&pipeline_cache, &custom_pipeline, key, &mesh.layout)
-                .unwrap();
-            transparent_phase.add(Transparent3d {
-                entity,
-                pipeline,
-                draw_function: draw_custom,
-                distance: rangefinder
-                    .distance_translation(&mesh_instance.transforms.transform.translation),
-                batch_range: 0..1,
-                dynamic_offset: None,
-            });
-        }
-    }
-}
-
-#[derive(Component)]
-pub struct InstanceBuffer {
-    buffer: Buffer,
-    length: usize,
-}
-
-fn prepare_instance_buffers(
-    mut commands: Commands,
-    query: Query<(Entity, &InstanceMaterialData)>,
-    render_device: Res<RenderDevice>,
-) {
-    for (entity, instance_data) in &query {
-        let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("instance data buffer"),
-            contents: bytemuck::cast_slice(instance_data.as_slice()),
-            usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-        });
-        commands.entity(entity).insert(InstanceBuffer {
-            buffer,
-            length: instance_data.len(),
-        });
-    }
-}
-
-#[derive(Resource)]
-pub struct CustomPipeline {
-    shader: Handle<Shader>,
-    mesh_pipeline: MeshPipeline,
-}
-
-impl FromWorld for CustomPipeline {
-    fn from_world(world: &mut World) -> Self {
-        let asset_server = world.resource::<AssetServer>();
-        let shader = asset_server.load("shaders/instancing.wgsl");
-
-        let mesh_pipeline = world.resource::<MeshPipeline>();
-
-        CustomPipeline {
-            shader,
-            mesh_pipeline: mesh_pipeline.clone(),
-        }
-    }
-}
-
-impl SpecializedMeshPipeline for CustomPipeline {
-    type Key = MeshPipelineKey;
-
-    fn specialize(
-        &self,
-        key: Self::Key,
-        layout: &MeshVertexBufferLayout,
-    ) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
-        let mut descriptor = self.mesh_pipeline.specialize(key, layout)?;
-
-        // meshes typically live in bind group 2. because we are using bindgroup 1
-        // we need to add MESH_BINDGROUP_1 shader def so that the bindings are correctly
-        // linked in the shader
-        descriptor
-            .vertex
-            .shader_defs
-            .push("MESH_BINDGROUP_1".into());
-
-        descriptor.vertex.shader = self.shader.clone();
-        descriptor.vertex.buffers.push(VertexBufferLayout {
-            array_stride: std::mem::size_of::<InstanceData>() as u64,
-            step_mode: VertexStepMode::Instance,
-            attributes: vec![
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: 0,
-                    shader_location: 3, // shader locations 0-2 are taken up by Position, Normal and UV attributes
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size(),
-                    shader_location: 4,
-                },
-            ],
-        });
-        descriptor.fragment.as_mut().unwrap().shader = self.shader.clone();
-        Ok(descriptor)
-    }
-}
-
-type DrawCustom = (
-    SetItemPipeline,
-    SetMeshViewBindGroup<0>,
-    SetMeshBindGroup<1>,
-    DrawMeshInstanced,
-);
-
-pub struct DrawMeshInstanced;
-
-impl<P: PhaseItem> RenderCommand<P> for DrawMeshInstanced {
-    type Param = (SRes<RenderAssets<Mesh>>, SRes<RenderMeshInstances>);
-    type ViewWorldQuery = ();
-    type ItemWorldQuery = Read<InstanceBuffer>;
-
-    #[inline]
-    fn render<'w>(
-        item: &P,
-        _view: (),
-        instance_buffer: &'w InstanceBuffer,
-        (meshes, render_mesh_instances): SystemParamItem<'w, '_, Self::Param>,
-        pass: &mut TrackedRenderPass<'w>,
-    ) -> RenderCommandResult {
-        let Some(mesh_instance) = render_mesh_instances.get(&item.entity()) else {
-            return RenderCommandResult::Failure;
-        };
-        let gpu_mesh = match meshes.into_inner().get(mesh_instance.mesh_asset_id) {
-            Some(gpu_mesh) => gpu_mesh,
-            None => return RenderCommandResult::Failure,
-        };
-
-        pass.set_vertex_buffer(0, gpu_mesh.vertex_buffer.slice(..));
-        pass.set_vertex_buffer(1, instance_buffer.buffer.slice(..));
-
-        match &gpu_mesh.buffer_info {
-            GpuBufferInfo::Indexed {
-                buffer,
-                index_format,
-                count,
-            } => {
-                pass.set_index_buffer(buffer.slice(..), 0, *index_format);
-                pass.draw_indexed(0..*count, 0, 0..instance_buffer.length as u32);
-            }
-            GpuBufferInfo::NonIndexed => {
-                pass.draw(0..gpu_mesh.vertex_count, 0..instance_buffer.length as u32);
-            }
-        }
-        RenderCommandResult::Success
     }
 }
