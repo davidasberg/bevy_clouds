@@ -3,30 +3,16 @@ mod pipeline;
 pub mod settings;
 
 use bevy::{
-    core_pipeline::{core_3d, fullscreen_vertex_shader::fullscreen_shader_vertex_state},
-    ecs::query::QueryItem,
-    pbr::{GpuLights, LightMeta, ViewLightsUniformOffset},
+    core_pipeline::{core_3d},
     prelude::*,
     render::{
         extract_component::{
-            ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
+            ExtractComponentPlugin, UniformComponentPlugin,
         },
         extract_resource::{ExtractResource, ExtractResourcePlugin},
-        render_asset::RenderAssets,
         render_graph::{
-            NodeRunError, RenderGraphApp, RenderGraphContext, ViewNode, ViewNodeRunner,
+            RenderGraphApp, ViewNodeRunner,
         },
-        render_resource::{
-            BindGroupEntries, BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
-            BindingType, BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites,
-            FragmentState, MultisampleState, Operations, PipelineCache, PrimitiveState,
-            RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor, Sampler,
-            SamplerBindingType, SamplerDescriptor, ShaderStages, ShaderType, TextureFormat,
-            TextureSampleType, TextureViewDimension,
-        },
-        renderer::{RenderContext, RenderDevice},
-        texture::BevyDefault,
-        view::{ViewTarget, ViewUniform, ViewUniformOffset, ViewUniforms},
         RenderApp,
     },
 };

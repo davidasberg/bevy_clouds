@@ -1,29 +1,18 @@
 use bevy::{
-    core_pipeline::{core_3d, fullscreen_vertex_shader::fullscreen_shader_vertex_state},
-    ecs::query::QueryItem,
-    pbr::{GpuLights, LightMeta, ViewLightsUniformOffset},
+    core_pipeline::{fullscreen_vertex_shader::fullscreen_shader_vertex_state},
+    pbr::{GpuLights},
     prelude::*,
     render::{
-        extract_component::{
-            ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
-        },
-        extract_resource::{ExtractResource, ExtractResourcePlugin},
-        render_asset::RenderAssets,
-        render_graph::{
-            NodeRunError, RenderGraphApp, RenderGraphContext, ViewNode, ViewNodeRunner,
-        },
         render_resource::{
-            BindGroupEntries, BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
+            BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
             BindingType, BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites,
-            FragmentState, MultisampleState, Operations, PipelineCache, PrimitiveState,
-            RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor, Sampler,
+            FragmentState, MultisampleState, PipelineCache, PrimitiveState, RenderPipelineDescriptor, Sampler,
             SamplerBindingType, SamplerDescriptor, ShaderStages, ShaderType, TextureFormat,
             TextureSampleType, TextureViewDimension,
         },
-        renderer::{RenderContext, RenderDevice},
+        renderer::{RenderDevice},
         texture::BevyDefault,
-        view::{ViewTarget, ViewUniform, ViewUniformOffset, ViewUniforms},
-        RenderApp,
+        view::{ViewUniform},
     },
 };
 
