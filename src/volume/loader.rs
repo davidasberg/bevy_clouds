@@ -1,13 +1,11 @@
-use std::io::BufReader;
+
 
 use bevy::{
     asset::{io::Reader, AssetLoader, AsyncReadExt, LoadContext},
-    input::gamepad,
-    log::info,
     math::IVec3,
     render::{
         render_resource::{
-            encase::internal::BufferRef, Extent3d, TextureDescriptor, TextureDimension,
+            Extent3d, TextureDescriptor, TextureDimension,
             TextureFormat, TextureUsages,
         },
         texture::{Image, ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
@@ -15,7 +13,7 @@ use bevy::{
     utils::BoxedFuture,
 };
 
-use half::f16;
+
 use thiserror::Error;
 use vdb_rs::{GridMetadataError, ParseError, VdbReader};
 

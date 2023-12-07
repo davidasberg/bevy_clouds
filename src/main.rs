@@ -11,63 +11,17 @@ mod volume;
 
 use bevy::{
     asset::LoadState,
-    core_pipeline::{
-        clear_color::ClearColorConfig,
-        core_3d::{self, Transparent3d},
-        fullscreen_vertex_shader::fullscreen_shader_vertex_state,
-        Skybox,
-    },
-    ecs::{
-        query::QueryItem,
-        system::{
-            lifetimeless::{Read, SRes},
-            SystemParamItem,
-        },
-    },
-    pbr::{
-        MeshPipeline, MeshPipelineKey, RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup,
-    },
+    core_pipeline::Skybox,
     prelude::*,
     render::{
-        extract_component::{
-            ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
-        },
-        mesh::{GpuBufferInfo, MeshVertexBufferLayout},
-        render_asset::RenderAssets,
-        render_graph::{
-            NodeRunError, RenderGraphApp, RenderGraphContext, ViewNode, ViewNodeRunner,
-        },
-        render_phase::{
-            AddRenderCommand, DrawFunctions, PhaseItem, RenderCommand, RenderCommandResult,
-            RenderPhase, SetItemPipeline, TrackedRenderPass,
-        },
-        render_resource::{
-            BindGroupEntries, BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
-            BindingType, Buffer, BufferInitDescriptor, BufferUsages, CachedRenderPipelineId,
-            ColorTargetState, ColorWrites, FragmentState, MultisampleState, Operations,
-            PipelineCache, PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor,
-            RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages,
-            ShaderType, SpecializedMeshPipeline, SpecializedMeshPipelineError,
-            SpecializedMeshPipelines, TextureFormat, TextureSampleType, TextureViewDescriptor,
-            TextureViewDimension, VertexAttribute, VertexBufferLayout, VertexFormat,
-            VertexStepMode,
-        },
-        renderer::{RenderContext, RenderDevice},
-        texture::BevyDefault,
-        view::{ExtractedView, NoFrustumCulling, ViewTarget},
-        Render, RenderApp, RenderSet,
+        render_graph::ViewNode,
+        render_resource::{TextureViewDescriptor, TextureViewDimension},
     },
-    sprite::MaterialMesh2dBundle,
 };
 
-use bytemuck::{Pod, Zeroable};
-
 use camera_controller::{PanOrbitCamera, PanOrbitCameraPlugin};
-use vdb_rs::VdbReader;
 
-use std::{error::Error, fs::File, io::BufReader};
-
-use cloud::{CloudRenderPlugin, CloudSettings};
+use cloud::CloudRenderPlugin;
 
 fn main() {
     App::new()
@@ -89,7 +43,7 @@ fn rotate_light(time: Res<Time>, mut query: Query<&mut Transform, With<Direction
 
 fn setup(
     mut commands: Commands,
-    images: Res<Assets<Image>>,
+    _images: Res<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
@@ -133,8 +87,8 @@ struct SkyboxTexture {
 fn skybox_loaded(
     asset_server: Res<AssetServer>,
     mut images: ResMut<Assets<Image>>,
-    mut skybox_texture: ResMut<SkyboxTexture>,
-    mut skyboxes: Query<&mut Skybox>,
+    skybox_texture: ResMut<SkyboxTexture>,
+    _skyboxes: Query<&mut Skybox>,
 ) {
     if asset_server.load_state(&skybox_texture.image) == LoadState::Loaded {
         let image = images.get_mut(&skybox_texture.image).unwrap();
