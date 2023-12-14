@@ -3,6 +3,7 @@ use bevy::{
     prelude::*,
     window::PrimaryWindow,
 };
+use bevy_inspector_egui::bevy_egui::EguiContexts;
 
 pub struct PanOrbitCameraPlugin;
 
@@ -57,7 +58,13 @@ fn pan_orbit_camera(
     input_mouse: Res<Input<MouseButton>>,
     mut query: Query<(&mut PanOrbitCamera, &mut Transform, &Projection)>,
     settings: Res<PanOrbitCameraSettings>,
+    mut egui_contexts: EguiContexts,
 ) {
+    let ctx = egui_contexts.ctx_mut();
+    if ctx.wants_pointer_input() {
+        return;
+    }
+
     let window = windows.single();
     let window_size = Vec2::new(window.width() as f32, window.height() as f32);
 
