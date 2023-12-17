@@ -47,8 +47,6 @@ struct CloudSettings {
     light_absorption_sun: f32,
     darkness_threshold: f32,
     ray_offset_strength: f32,
-    forward_scattering: f32,
-    back_scattering: f32,
     base_brightness: f32,
     phase_factor: f32,
 }
@@ -106,7 +104,6 @@ fn ray_box_distance(bounds_min: vec3f, bounds_max: vec3f, origin: vec3f, directi
     let distance_to_box = max(dstA, 0.0);
     let distance_inside_box = max(dstB - distance_to_box, 0.0);
     return vec2f(distance_to_box, distance_inside_box);
-
 }
 
 fn sample_density(position: vec3<f32>) -> f32 {
@@ -129,7 +126,7 @@ fn light_march(position: vec3f) -> f32 {
     while distance_travelled < distance_inside_box {
         let position = position + dir_to_light * distance_travelled;
         let density = sample_density(position);
-        total_density += max(0.0,density * step_size);
+        total_density += max(0.0, density * step_size);
         distance_travelled += step_size;
     }
 
@@ -142,19 +139,60 @@ fn random(st: vec2f) -> f32 {
 }
 
 
-fn henyey_greenstein_phase_function(cos_theta: f32, g: f32) -> f32 {
-    let g2 = g * g;
-    let denom = 4.0 * PI * pow(1.0+ g2- 2.0 * g * cos_theta, 1.5); 
+fn rayleigh_phase_function(cos_theta: f32) -> f32 {
+    return (3.0 / 4.0) * (1.0 + cos_theta * cos_theta);
 }
 
-fn phase_function(cos_theta: f32) -> f32 {
-    let blend = 0.5;
-    let forward_scattering = cloud_settings.forward_scattering;
-    let back_scattering = cloud_settings.back_scattering;
+fn henyey_greenstein_phase_function(cos_theta: f32, g: f32) -> f32 {
+    let g2 = g * g;
+    let denom = 4.0 * PI * pow(1.0 + g2 - 2.0 * g * cos_theta, 1.5);
+    return (1.0 - g2) / denom;
+}
+
+fn cornette_shanks_phase_function(cos_theta: f32, g: f32) -> f32 {
+    let g2 = g * g;
+    let denom = 2.0 * (2.0 + g2) * pow(1.0 + g2 - 2.0 * g * cos_theta, 1.5);
+    return (3.0 * (1.0 - g2) * (1.0 + cos_theta * cos_theta)) / denom;
+}
+
+fn phase_function(cos_theta: f32, phase_factor: f32) -> f32 {
     let base_brightness = cloud_settings.base_brightness;
-    let phase_factor = cloud_settings.phase_factor;
-    let hg_blend = henyey_greenstein_phase_function(cos_theta, forward_scattering) * (1.0-blend) + henyey_greenstein_phase_function(cos_theta, -back_scattering) * blend;
-    return base_brightness + phase_factor * hg_blend;
+    let phase = henyey_greenstein_phase_function(cos_theta, phase_factor);
+    // let phase = cornette_shanks_phase_function(cos_theta, phase_factor);
+    // let phase = rayleigh_phase_function(cos_theta);
+    return base_brightness + phase;
+}
+
+// fn multiple_octave_scattering(density: f32, cos_theta: f32) -> f32 {
+//     let attenuation = 0.5; // Attenuation factor
+//     let contribution = 0.5; // contribution 
+//     let phase_attenuation = 0.5; // eccentricity attenuation
+//     let N = 8;
+
+//     var a = 1.0;
+//     var b = 1.0;
+//     var c = 1.0;
+//     var g = 0.85;
+
+//     var luminance = 0.0;
+//     for (var i = 0; i < N; i++) {
+//         var phase = phase_function(cos_theta, cloud_settings.phase_factor * c);
+//         var beers = exp(-density * c * phase * cloud_settings.light_absorption);
+//         luminance += b * phase * beers;
+//         a *= attenuation;
+//         b *= contribution;
+//         c *= (1.0 - phase_attenuation);
+//     }
+
+//     return luminance;
+// }
+
+fn beers_law(dist: f32, density: f32, absorption: f32) -> f32 {
+    return exp(-density * dist * absorption);
+}
+
+fn beers_powder(dist: f32, density: f32, absorption: f32) -> f32 {
+    return max(0.0, exp(-density * dist * absorption) - (1.0 - exp(-density * dist * absorption * 2.0)));
 }
 
 @fragment
@@ -166,13 +204,15 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let distance_to_box = ray_distance.x;
     let distance_inside_box = ray_distance.y;
     let entry_point = ray_origin + ray_direction * distance_to_box;
-    
+
+    let absorption = cloud_settings.light_absorption;
+
     let random_offset = random(in.uv) * cloud_settings.ray_offset_strength;
     var distance_travelled = random_offset;
 
     let cos_theta = dot(ray_direction, lights.directional_lights[0].direction_to_light);
-    let phase_value = phase_function(cos_theta);
-    
+    let phase_value = phase_function(cos_theta, cloud_settings.phase_factor);
+
     let distance_limit = distance_inside_box;
     let step_size = distance_limit / f32(cloud_settings.steps);
     var light_energy = 0.0;
@@ -183,7 +223,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         if density > 0.0 {
             let light_transmittance = light_march(position);
             light_energy += density * step_size * transmittance * light_transmittance * phase_value;
-            transmittance *= exp(-density * step_size * cloud_settings.light_absorption);
+            transmittance *= beers_law(step_size, density, absorption);
 
             if transmittance < 0.01 {
                 break;

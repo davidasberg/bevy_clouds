@@ -1,18 +1,18 @@
 use bevy::{
-    core_pipeline::{fullscreen_vertex_shader::fullscreen_shader_vertex_state},
-    pbr::{GpuLights},
+    core_pipeline::fullscreen_vertex_shader::fullscreen_shader_vertex_state,
+    pbr::GpuLights,
     prelude::*,
     render::{
         render_resource::{
-            BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
-            BindingType, BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites,
-            FragmentState, MultisampleState, PipelineCache, PrimitiveState, RenderPipelineDescriptor, Sampler,
-            SamplerBindingType, SamplerDescriptor, ShaderStages, ShaderType, TextureFormat,
-            TextureSampleType, TextureViewDimension,
+            BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType,
+            BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites,
+            FragmentState, MultisampleState, PipelineCache, PrimitiveState,
+            RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages,
+            ShaderType, TextureFormat, TextureSampleType, TextureViewDimension,
         },
-        renderer::{RenderDevice},
+        renderer::RenderDevice,
         texture::BevyDefault,
-        view::{ViewUniform},
+        view::ViewUniform,
     },
 };
 

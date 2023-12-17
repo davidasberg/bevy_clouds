@@ -3,16 +3,12 @@ mod pipeline;
 pub mod settings;
 
 use bevy::{
-    core_pipeline::{core_3d},
+    core_pipeline::core_3d,
     prelude::*,
     render::{
-        extract_component::{
-            ExtractComponentPlugin, UniformComponentPlugin,
-        },
+        extract_component::{ExtractComponentPlugin, UniformComponentPlugin},
         extract_resource::{ExtractResource, ExtractResourcePlugin},
-        render_graph::{
-            RenderGraphApp, ViewNodeRunner,
-        },
+        render_graph::{RenderGraphApp, ViewNodeRunner},
         RenderApp,
     },
 };
@@ -32,18 +28,16 @@ fn load_volume(asset_server: Res<AssetServer>, mut commands: Commands) {
         CloudSettings {
             bounds_min: Vec3::new(-1.0, -1.0, -1.0),
             bounds_max: Vec3::new(1.0, 1.0, 1.0),
-            steps: 250,
-            light_steps: 50,
+            steps: 200,
+            light_steps: 40,
             light_absorption: 12.0,
             light_absorption_sun: 20.0,
             darkness_threshold: 0.2,
             ray_offset_strength: 0.001,
-            forward_scattering: 0.83,
-            back_scattering: 0.3,
             base_brightness: 0.8,
             phase_factor: 0.15,
         },
-        Name::new("cloud_settings"),
+        Name::new("Cloud Settings"),
     ));
 }
 

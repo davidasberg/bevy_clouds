@@ -12,6 +12,7 @@ mod volume;
 use bevy::{
     asset::LoadState,
     core_pipeline::Skybox,
+    diagnostic::FrameTimeDiagnosticsPlugin,
     prelude::*,
     render::{
         render_graph::ViewNode,
@@ -19,13 +20,22 @@ use bevy::{
     },
 };
 
+use bevy_editor_pls::EditorPlugin;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use camera_controller::{PanOrbitCamera, PanOrbitCameraPlugin};
 
 use cloud::CloudRenderPlugin;
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins, PanOrbitCameraPlugin, CloudRenderPlugin))
+        .add_plugins((
+            DefaultPlugins,
+            PanOrbitCameraPlugin,
+            CloudRenderPlugin,
+            WorldInspectorPlugin::new(),
+            EditorPlugin::new(),
+            FrameTimeDiagnosticsPlugin::default(),
+        ))
         .init_asset_loader::<volume::loader::VolumeLoader>()
         .add_systems(Startup, setup)
         .add_systems(Update, (rotate_light, skybox_loaded))
@@ -36,9 +46,9 @@ fn main() {
 struct MainCamera;
 
 fn rotate_light(time: Res<Time>, mut query: Query<&mut Transform, With<DirectionalLight>>) {
-    for mut transform in &mut query {
-        transform.rotate(Quat::from_rotation_y(time.delta_seconds()));
-    }
+    // for mut transform in &mut query {
+    //     transform.rotate(Quat::from_rotation_y(time.delta_seconds()));
+    // }
 }
 
 fn setup(
@@ -72,7 +82,7 @@ fn setup(
         transform: Transform::from_xyz(0.0, -1.0, 0.0),
         mesh: meshes.add(Mesh::from(shape::Plane {
             size: 5.0,
-            subdivisions: 100,
+            subdivisions: 1,
         })),
         material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
         ..Default::default()

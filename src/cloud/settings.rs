@@ -1,13 +1,6 @@
 use bevy::{
     prelude::*,
-    render::{
-        extract_component::{
-            ExtractComponent,
-        },
-        render_resource::{
-            ShaderType,
-        },
-    },
+    render::{extract_component::ExtractComponent, render_resource::ShaderType},
 };
 
 // This is the component that will get passed to the shader
@@ -32,8 +25,6 @@ pub struct CloudSettings {
     pub ray_offset_strength: f32,
 
     // The following settings are used in the phase function
-    pub forward_scattering: f32,
-    pub back_scattering: f32,
     pub base_brightness: f32,
     pub phase_factor: f32,
 }

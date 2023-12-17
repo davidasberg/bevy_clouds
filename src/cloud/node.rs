@@ -3,18 +3,14 @@ use bevy::{
     pbr::{LightMeta, ViewLightsUniformOffset},
     prelude::*,
     render::{
-        extract_component::{
-            ComponentUniforms,
-        },
+        extract_component::ComponentUniforms,
         render_asset::RenderAssets,
-        render_graph::{
-            NodeRunError, RenderGraphContext, ViewNode,
-        },
+        render_graph::{NodeRunError, RenderGraphContext, ViewNode},
         render_resource::{
-            BindGroupEntries, Operations, PipelineCache,
-            RenderPassColorAttachment, RenderPassDescriptor,
+            BindGroupEntries, Operations, PipelineCache, RenderPassColorAttachment,
+            RenderPassDescriptor,
         },
-        renderer::{RenderContext},
+        renderer::RenderContext,
         view::{ViewTarget, ViewUniformOffset, ViewUniforms},
     },
 };
