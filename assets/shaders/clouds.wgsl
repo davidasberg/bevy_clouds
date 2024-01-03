@@ -121,13 +121,15 @@ fn light_march(position: vec3f, cos_theta: f32) -> f32 {
     let ray_distance = ray_box_distance(cloud_settings.bounds_min, cloud_settings.bounds_max, position, dir_to_light);
     let distance_inside_box = ray_distance.y;
 
+    let phase_value = phase_function(cos_theta);
+
     let step_size = distance_inside_box / f32(cloud_settings.light_steps);
     var distance_travelled = 0.0;
     var total_density = 0.0;
     while distance_travelled < distance_inside_box {
         let position = position + dir_to_light * distance_travelled;
         let density = sample_density(position);
-        total_density += max(0.0, density * step_size);
+        total_density += max(0.0, density * step_size) * phase_value;
         distance_travelled += step_size;
     }
 
@@ -159,9 +161,9 @@ fn cornette_shanks_phase_function(cos_theta: f32, g: f32) -> f32 {
 fn phase_function(cos_theta: f32) -> f32 {
     let base_brightness = cloud_settings.base_brightness;
     let phase_factor = cloud_settings.phase_factor;
-    let phase = henyey_greenstein_phase_function(cos_theta, phase_factor);
+    // let phase = henyey_greenstein_phase_function(cos_theta, phase_factor);
     // let phase = cornette_shanks_phase_function(cos_theta, phase_factor);
-    // let phase = rayleigh_phase_function(cos_theta);
+    let phase = rayleigh_phase_function(cos_theta);
     return base_brightness + phase;
 }
 
@@ -226,6 +228,7 @@ fn beers_powder(d: f32) -> f32 {
 
 @fragment
 fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
+    // return vec4f(1.0, 0.0, 0.0, 1.0);
     // https://discord.com/channels/691052431525675048/866787577687310356/1055261041254211705
     var ray_origin = view.world_position;
     var ray_direction = pixel_to_ray_direction(saturate(in.uv));

@@ -139,6 +139,8 @@ impl ViewNode for CloudRenderNode {
             )),
         );
 
+        info_span!("cloud_render_node", name = "cloud_render_node");
+
         // Begin the render pass
         let mut render_pass = render_context.begin_tracked_render_pass(RenderPassDescriptor {
             label: Some("cloud_pass"),

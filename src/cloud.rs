@@ -34,8 +34,8 @@ fn load_volume(asset_server: Res<AssetServer>, mut commands: Commands) {
         CloudSettings {
             bounds_min: Vec3::new(-1.0, -1.0, -1.0),
             bounds_max: Vec3::new(1.0, 1.0, 1.0),
-            steps: 200,
-            light_steps: 40,
+            steps: 150,
+            light_steps: 10,
             light_scattering: 0.5,
             light_absorption: 12.0,
             darkness_threshold: 0.2,
