@@ -14,10 +14,7 @@ use bevy::{
     core_pipeline::Skybox,
     diagnostic::FrameTimeDiagnosticsPlugin,
     prelude::*,
-    render::{
-        render_graph::ViewNode,
-        render_resource::{TextureViewDescriptor, TextureViewDimension},
-    },
+    render::render_resource::{TextureViewDescriptor, TextureViewDimension},
 };
 
 use bevy_editor_pls::EditorPlugin;
@@ -38,18 +35,18 @@ fn main() {
         ))
         .init_asset_loader::<volume::loader::VolumeLoader>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (rotate_light, skybox_loaded))
+        .add_systems(Update, skybox_loaded)
         .run();
 }
 
-#[derive(Component)]
-struct MainCamera;
+#[derive(Component, Clone)]
+pub struct MainCamera;
 
-fn rotate_light(time: Res<Time>, mut query: Query<&mut Transform, With<DirectionalLight>>) {
-    // for mut transform in &mut query {
-    //     transform.rotate(Quat::from_rotation_y(time.delta_seconds()));
-    // }
-}
+// fn rotate_light(time: Res<Time>, mut query: Query<&mut Transform, With<DirectionalLight>>) {
+// for mut transform in &mut query {
+//     transform.rotate(Quat::from_rotation_y(time.delta_seconds()));
+// }
+// }
 
 fn setup(
     mut commands: Commands,

@@ -13,7 +13,7 @@ use bevy::{
     },
 };
 
-use self::settings::CloudSettings;
+use self::settings::{CloudSettings, CloudSettingsAsset};
 use self::{node::CloudRenderNode, pipeline::CloudPipeline};
 
 #[derive(Resource, ExtractResource, Default, Clone)]
@@ -22,20 +22,26 @@ struct CloudVolume {
 }
 
 fn load_volume(asset_server: Res<AssetServer>, mut commands: Commands) {
-    let image: Handle<Image> = asset_server.load("volumes/Cloud_010.vdb");
+    let image: Handle<Image> = asset_server.load("volumes/bunny_cloud.vdb");
     commands.insert_resource(CloudVolume { image });
+    commands.insert_resource(CloudSettingsAsset {
+        alpha_mode: AlphaMode::Blend,
+        light_radius: 0.5,
+        player_position: Vec3::new(0.0, 0.0, 0.0),
+        hexling_positions: [Vec3::new(0.0, 0.0, 0.0); 2],
+    });
     commands.spawn((
         CloudSettings {
             bounds_min: Vec3::new(-1.0, -1.0, -1.0),
             bounds_max: Vec3::new(1.0, 1.0, 1.0),
             steps: 200,
             light_steps: 40,
+            light_scattering: 0.5,
             light_absorption: 12.0,
-            light_absorption_sun: 20.0,
             darkness_threshold: 0.2,
             ray_offset_strength: 0.001,
             base_brightness: 0.8,
-            phase_factor: 0.15,
+            phase_factor: 0.9,
         },
         Name::new("Cloud Settings"),
     ));

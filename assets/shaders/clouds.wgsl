@@ -43,8 +43,8 @@ struct CloudSettings {
     bounds_max: vec3f,
     steps: u32,
     light_steps: u32,
+    light_scattering: f32,
     light_absorption: f32,
-    light_absorption_sun: f32,
     darkness_threshold: f32,
     ray_offset_strength: f32,
     base_brightness: f32,
@@ -106,6 +106,7 @@ fn ray_box_distance(bounds_min: vec3f, bounds_max: vec3f, origin: vec3f, directi
     return vec2f(distance_to_box, distance_inside_box);
 }
 
+
 fn sample_density(position: vec3<f32>) -> f32 {
     // position is in world space -1 to 1
     // volume texture is in uv space 0 to 1
@@ -115,7 +116,7 @@ fn sample_density(position: vec3<f32>) -> f32 {
     return max(density, 0.0);
 }
 
-fn light_march(position: vec3f) -> f32 {
+fn light_march(position: vec3f, cos_theta: f32) -> f32 {
     let dir_to_light = lights.directional_lights[0].direction_to_light;
     let ray_distance = ray_box_distance(cloud_settings.bounds_min, cloud_settings.bounds_max, position, dir_to_light);
     let distance_inside_box = ray_distance.y;
@@ -130,7 +131,7 @@ fn light_march(position: vec3f) -> f32 {
         distance_travelled += step_size;
     }
 
-    let transmittance = exp(-total_density * cloud_settings.light_absorption_sun);
+    let transmittance = exp(-total_density * cloud_settings.light_absorption);
     return cloud_settings.darkness_threshold + transmittance * (1.0 - cloud_settings.darkness_threshold);
 }
 
@@ -155,8 +156,9 @@ fn cornette_shanks_phase_function(cos_theta: f32, g: f32) -> f32 {
     return (3.0 * (1.0 - g2) * (1.0 + cos_theta * cos_theta)) / denom;
 }
 
-fn phase_function(cos_theta: f32, phase_factor: f32) -> f32 {
+fn phase_function(cos_theta: f32) -> f32 {
     let base_brightness = cloud_settings.base_brightness;
+    let phase_factor = cloud_settings.phase_factor;
     let phase = henyey_greenstein_phase_function(cos_theta, phase_factor);
     // let phase = cornette_shanks_phase_function(cos_theta, phase_factor);
     // let phase = rayleigh_phase_function(cos_theta);
@@ -164,10 +166,10 @@ fn phase_function(cos_theta: f32, phase_factor: f32) -> f32 {
 }
 
 // fn multiple_octave_scattering(density: f32, cos_theta: f32) -> f32 {
-//     let attenuation = 0.5; // Attenuation factor
-//     let contribution = 0.5; // contribution 
-//     let phase_attenuation = 0.5; // eccentricity attenuation
-//     let N = 8;
+//     let attenuation = 0.3; // Attenuation factor
+//     let contribution = 0.7; // contribution 
+//     let phase_attenuation = 0.9; // eccentricity attenuation
+//     let N = 4;
 
 //     var a = 1.0;
 //     var b = 1.0;
@@ -176,8 +178,8 @@ fn phase_function(cos_theta: f32, phase_factor: f32) -> f32 {
 
 //     var luminance = 0.0;
 //     for (var i = 0; i < N; i++) {
-//         var phase = phase_function(cos_theta, cloud_settings.phase_factor * c);
-//         var beers = exp(-density * c * phase * cloud_settings.light_absorption);
+//         var phase = phase_function(cos_theta, c * cloud_settings.phase_factor);
+//         var beers = beers(density * a * cloud_settings.light_absorption);
 //         luminance += b * phase * beers;
 //         a *= attenuation;
 //         b *= contribution;
@@ -187,13 +189,40 @@ fn phase_function(cos_theta: f32, phase_factor: f32) -> f32 {
 //     return luminance;
 // }
 
-fn beers_law(dist: f32, density: f32, absorption: f32) -> f32 {
-    return exp(-density * dist * absorption);
+fn beers(d: f32) -> f32 {
+    return exp(-d);
 }
 
-fn beers_powder(dist: f32, density: f32, absorption: f32) -> f32 {
-    return max(0.0, exp(-density * dist * absorption) - (1.0 - exp(-density * dist * absorption * 2.0)));
+fn powder(d: f32) -> f32 {
+    return (2.0 - exp(-d * 3.0));
 }
+
+fn beers_powder(d: f32) -> f32 {
+    return beers(d) * powder(d);
+}
+
+
+// sigma_a | Absorption coefficient | 1/m
+// sigma_s | Scattering coefficient | 1/m
+// sigma_t | Extinction coefficient | 1/m
+// sigma_t = sigma_a + sigma_s
+// rho | Albedo | unitless
+// p | Phase function | 1/sr (inverse steradians)
+// L | Luminance | cd/m^2
+// L(x,w) | Light at point x in direction w | cd/m^2
+// E | Illuminance | cd / (sr * m^2)
+
+// Absorption: photons that are absorbed by the medium
+// 
+// Out-scattering: photons that are scattered away by bouncing off particles.
+// This is done according to the phase function.
+// 
+// In-scattering: photons that are scattered into the view direction from other directions.
+// This is done according to the phase function.
+//
+// Emittance: photons that are emitted by the medium itself.
+// In the case of clouds, this is ignored, as clouds are emissive.
+
 
 @fragment
 fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
@@ -211,7 +240,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     var distance_travelled = random_offset;
 
     let cos_theta = dot(ray_direction, lights.directional_lights[0].direction_to_light);
-    let phase_value = phase_function(cos_theta, cloud_settings.phase_factor);
+    let phase_value = phase_function(cos_theta);
 
     let distance_limit = distance_inside_box;
     let step_size = distance_limit / f32(cloud_settings.steps);
@@ -221,9 +250,9 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         let position = entry_point + ray_direction * distance_travelled;
         let density = sample_density(position);
         if density > 0.0 {
-            let light_transmittance = light_march(position);
-            light_energy += density * step_size * transmittance * light_transmittance * phase_value;
-            transmittance *= beers_law(step_size, density, absorption);
+            let light_transmittance = light_march(position, cos_theta);
+            light_energy += density * step_size * transmittance * light_transmittance;
+            transmittance *= beers(step_size * density * absorption);
 
             if transmittance < 0.01 {
                 break;

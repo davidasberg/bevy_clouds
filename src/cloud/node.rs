@@ -15,6 +15,8 @@ use bevy::{
     },
 };
 
+use crate::MainCamera;
+
 use super::CloudVolume;
 use super::{pipeline::CloudPipeline, settings::CloudSettings};
 
