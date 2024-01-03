@@ -129,11 +129,11 @@ fn light_march(position: vec3f, cos_theta: f32) -> f32 {
     while distance_travelled < distance_inside_box {
         let position = position + dir_to_light * distance_travelled;
         let density = sample_density(position);
-        total_density += max(0.0, density * step_size) * phase_value;
+        total_density += max(0.0, density * step_size);
         distance_travelled += step_size;
     }
 
-    let transmittance = exp(-total_density * cloud_settings.light_absorption);
+    let transmittance = exp(-total_density * cloud_settings.light_absorption * phase_value);
     return cloud_settings.darkness_threshold + transmittance * (1.0 - cloud_settings.darkness_threshold);
 }
 
@@ -161,9 +161,9 @@ fn cornette_shanks_phase_function(cos_theta: f32, g: f32) -> f32 {
 fn phase_function(cos_theta: f32) -> f32 {
     let base_brightness = cloud_settings.base_brightness;
     let phase_factor = cloud_settings.phase_factor;
-    // let phase = henyey_greenstein_phase_function(cos_theta, phase_factor);
+    let phase = henyey_greenstein_phase_function(cos_theta, phase_factor);
     // let phase = cornette_shanks_phase_function(cos_theta, phase_factor);
-    let phase = rayleigh_phase_function(cos_theta);
+    // let phase = rayleigh_phase_function(cos_theta);
     return base_brightness + phase;
 }
 
@@ -196,7 +196,7 @@ fn beers(d: f32) -> f32 {
 }
 
 fn powder(d: f32) -> f32 {
-    return (2.0 - exp(-d * 3.0));
+    return (1.0 - exp(-d * 2.0));
 }
 
 fn beers_powder(d: f32) -> f32 {

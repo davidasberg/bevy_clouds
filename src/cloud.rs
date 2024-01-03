@@ -22,7 +22,7 @@ struct CloudVolume {
 }
 
 fn load_volume(asset_server: Res<AssetServer>, mut commands: Commands) {
-    let image: Handle<Image> = asset_server.load("volumes/bunny_cloud.vdb");
+    let image: Handle<Image> = asset_server.load("volumes/cloud_03.vdb");
     commands.insert_resource(CloudVolume { image });
     commands.insert_resource(CloudSettingsAsset {
         alpha_mode: AlphaMode::Blend,
@@ -34,14 +34,14 @@ fn load_volume(asset_server: Res<AssetServer>, mut commands: Commands) {
         CloudSettings {
             bounds_min: Vec3::new(-1.0, -1.0, -1.0),
             bounds_max: Vec3::new(1.0, 1.0, 1.0),
-            steps: 150,
-            light_steps: 10,
+            steps: 200,
+            light_steps: 20,
             light_scattering: 0.5,
             light_absorption: 12.0,
             darkness_threshold: 0.2,
-            ray_offset_strength: 0.001,
-            base_brightness: 0.8,
-            phase_factor: 0.9,
+            ray_offset_strength: 0.02,
+            base_brightness: 0.9,
+            phase_factor: 0.8,
         },
         Name::new("Cloud Settings"),
     ));
