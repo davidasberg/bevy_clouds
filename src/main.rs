@@ -36,6 +36,8 @@ fn main() {
         .init_asset_loader::<volume::loader::VolumeLoader>()
         .add_systems(Startup, setup)
         .add_systems(Update, skybox_loaded)
+        // blue sky clear color
+        .insert_resource(ClearColor(Color::rgb(0.522, 0.733, 0.988)))
         .run();
 }
 
@@ -75,15 +77,15 @@ fn setup(
         // Skybox(skybox_handle),
     ));
 
-    commands.spawn((PbrBundle {
-        transform: Transform::from_xyz(0.0, -1.0, 0.0),
-        mesh: meshes.add(Mesh::from(shape::Plane {
-            size: 5.0,
-            subdivisions: 1,
-        })),
-        material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
-        ..Default::default()
-    },));
+    // commands.spawn((PbrBundle {
+    //     transform: Transform::from_xyz(0.0, -1.0, 0.0),
+    //     mesh: meshes.add(Mesh::from(shape::Plane {
+    //         size: 5.0,
+    //         subdivisions: 1,
+    //     })),
+    //     material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
+    //     ..Default::default()
+    // },));
 }
 
 #[derive(Resource)]

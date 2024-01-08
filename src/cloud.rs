@@ -22,7 +22,7 @@ struct CloudVolume {
 }
 
 fn load_volume(asset_server: Res<AssetServer>, mut commands: Commands) {
-    let image: Handle<Image> = asset_server.load("volumes/cloud_03.vdb");
+    let image: Handle<Image> = asset_server.load("volumes/cloud_04.vdb");
     commands.insert_resource(CloudVolume { image });
     commands.insert_resource(CloudSettingsAsset {
         alpha_mode: AlphaMode::Blend,
@@ -37,7 +37,7 @@ fn load_volume(asset_server: Res<AssetServer>, mut commands: Commands) {
             steps: 200,
             light_steps: 20,
             light_scattering: 0.5,
-            light_absorption: 12.0,
+            light_absorption: 8.0,
             darkness_threshold: 0.2,
             ray_offset_strength: 0.02,
             base_brightness: 0.9,
