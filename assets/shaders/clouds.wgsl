@@ -154,16 +154,16 @@ fn henyey_greenstein_phase_function(cos_theta: f32, g: f32) -> f32 {
 
 fn cornette_shanks_phase_function(cos_theta: f32, g: f32) -> f32 {
     let g2 = g * g;
-    let denom = 2.0 * (2.0 + g2) * pow(1.0 + g2 - 2.0 * g * cos_theta, 1.5);
+    let denom = 8.0 * PI * (2.0 + g2) * pow(1.0 + g2 - 2.0 * g * cos_theta, 1.5);
     return (3.0 * (1.0 - g2) * (1.0 + cos_theta * cos_theta)) / denom;
 }
 
 fn phase_function(cos_theta: f32) -> f32 {
     let base_brightness = cloud_settings.base_brightness;
     let phase_factor = cloud_settings.phase_factor;
-    let phase = henyey_greenstein_phase_function(cos_theta, phase_factor);
+    // let phase = henyey_greenstein_phase_function(cos_theta, phase_factor);
     // let phase = cornette_shanks_phase_function(cos_theta, phase_factor);
-    // let phase = rayleigh_phase_function(cos_theta);
+    let phase = rayleigh_phase_function(cos_theta);
     return base_brightness + phase;
 }
 
@@ -251,7 +251,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     var transmittance = 1.0;
     while distance_travelled < distance_limit {
         let position = entry_point + ray_direction * distance_travelled;
-        let density = sample_density(position);
+        let density = sample_density(position) / 3.0;
         if density > 0.0 {
             let light_transmittance = light_march(position, cos_theta);
             light_energy += density * step_size * transmittance * light_transmittance;
