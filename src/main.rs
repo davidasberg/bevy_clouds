@@ -14,8 +14,14 @@ use bevy::{
     core_pipeline::Skybox,
     diagnostic::FrameTimeDiagnosticsPlugin,
     prelude::*,
-    render::render_resource::{TextureViewDescriptor, TextureViewDimension},
+    render::{
+        render_resource::{TextureViewDescriptor, TextureViewDimension},
+        view::screenshot,
+    },
 };
+
+use bevy::render::view::screenshot::ScreenshotManager;
+use bevy::window::PrimaryWindow;
 
 use bevy_editor_pls::EditorPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
@@ -29,26 +35,47 @@ fn main() {
             DefaultPlugins,
             PanOrbitCameraPlugin,
             CloudRenderPlugin,
-            WorldInspectorPlugin::new(),
-            EditorPlugin::new(),
+            // WorldInspectorPlugin::new(),
+            EditorPlugin::new().in_new_window(Window::default()),
             FrameTimeDiagnosticsPlugin::default(),
         ))
         .init_asset_loader::<volume::loader::VolumeLoader>()
         .add_systems(Startup, setup)
-        .add_systems(Update, skybox_loaded)
+        .add_systems(Update, (skybox_loaded, screenshot_on_p, rotate_light))
         // blue sky clear color
         .insert_resource(ClearColor(Color::rgb(0.522, 0.733, 0.988)))
         .run();
 }
 
+fn screenshot_on_p(
+    input: Res<Input<KeyCode>>,
+    main_window: Query<Entity, With<PrimaryWindow>>,
+    mut screenshot_manager: ResMut<ScreenshotManager>,
+    mut counter: Local<u32>,
+) {
+    if input.just_pressed(KeyCode::P) {
+        let name = match *counter {
+            0 => "hg",
+            1 => "cs",
+            2 => "rayleigh",
+            _ => panic!("too many screenshots"),
+        };
+        let path = format!("./extra-{}.png", name);
+        *counter += 1;
+        screenshot_manager
+            .save_screenshot_to_disk(main_window.single(), path)
+            .unwrap();
+    }
+}
+
 #[derive(Component, Clone)]
 pub struct MainCamera;
 
-// fn rotate_light(time: Res<Time>, mut query: Query<&mut Transform, With<DirectionalLight>>) {
-// for mut transform in &mut query {
-//     transform.rotate(Quat::from_rotation_y(time.delta_seconds()));
-// }
-// }
+fn rotate_light(time: Res<Time>, mut query: Query<&mut Transform, With<DirectionalLight>>) {
+    for mut transform in &mut query {
+        transform.rotate(Quat::from_rotation_y(time.delta_seconds()));
+    }
+}
 
 fn setup(
     mut commands: Commands,
@@ -69,7 +96,7 @@ fn setup(
 
     commands.spawn((
         Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 0.2, 3.5).looking_at(Vec3::ZERO, Vec3::Y),
+            transform: Transform::from_xyz(0.0, 0.2, 2.8).looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
         MainCamera,

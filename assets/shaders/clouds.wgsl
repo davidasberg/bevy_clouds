@@ -161,10 +161,11 @@ fn cornette_shanks_phase_function(cos_theta: f32, g: f32) -> f32 {
 fn phase_function(cos_theta: f32) -> f32 {
     let base_brightness = cloud_settings.base_brightness;
     let phase_factor = cloud_settings.phase_factor;
-    // let phase = henyey_greenstein_phase_function(cos_theta, phase_factor);
-    // let phase = cornette_shanks_phase_function(cos_theta, phase_factor);
-    let phase = rayleigh_phase_function(cos_theta);
-    return base_brightness + phase;
+    return henyey_greenstein_phase_function(cos_theta, phase_factor) + base_brightness;
+    // return cornette_shanks_phase_function(cos_theta, phase_factor) + base_brightness;
+    // return rayleigh_phase_function(cos_theta) - 0.6;
+    // let phase = 0.0;
+    // return base_brightness + phase;
 }
 
 // fn multiple_octave_scattering(density: f32, cos_theta: f32) -> f32 {
@@ -268,4 +269,5 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let cloud_color = light_energy * lights.directional_lights[0].color.rgb;
     let color = background_color * transmittance + cloud_color;
     return vec4f(color, 0.0);
+    // return vec4f(phase_value, phase_value, phase_value, 1.0) * 2.0;
 }
