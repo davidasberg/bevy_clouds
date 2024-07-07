@@ -6,134 +6,81 @@
 //! This is a fairly low level example and assumes some familiarity with rendering concepts and wgpu.
 
 mod camera_controller;
-mod cloud;
-mod volume;
+mod volumetric_clouds;
+use bevy::{math::vec3, prelude::*};
 
-use bevy::{
-    asset::LoadState,
-    core_pipeline::Skybox,
-    diagnostic::FrameTimeDiagnosticsPlugin,
-    prelude::*,
-    render::{
-        render_resource::{TextureViewDescriptor, TextureViewDimension},
-        view::screenshot,
-    },
-};
-
-use bevy::render::view::screenshot::ScreenshotManager;
-use bevy::window::PrimaryWindow;
-
-use bevy_editor_pls::EditorPlugin;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use camera_controller::{PanOrbitCamera, PanOrbitCameraPlugin};
-
-use cloud::CloudRenderPlugin;
+use volumetric_clouds::{
+    CloudVolume, VolumetricCloudLight, VolumetricCloudPlugin, VolumetricCloudSettings,
+};
 
 fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
             PanOrbitCameraPlugin,
-            CloudRenderPlugin,
-            // WorldInspectorPlugin::new(),
-            EditorPlugin::new().in_new_window(Window::default()),
-            FrameTimeDiagnosticsPlugin::default(),
+            VolumetricCloudPlugin,
+            // WorldInspectorPlugin::new(), TODO: wait for update to bevy-egui-inspector
         ))
-        .init_asset_loader::<volume::loader::VolumeLoader>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (skybox_loaded, screenshot_on_p, rotate_light))
-        // blue sky clear color
-        .insert_resource(ClearColor(Color::rgb(0.522, 0.733, 0.988)))
         .run();
 }
 
-fn screenshot_on_p(
-    input: Res<Input<KeyCode>>,
-    main_window: Query<Entity, With<PrimaryWindow>>,
-    mut screenshot_manager: ResMut<ScreenshotManager>,
-    mut counter: Local<u32>,
-) {
-    if input.just_pressed(KeyCode::P) {
-        let name = match *counter {
-            0 => "hg",
-            1 => "cs",
-            2 => "rayleigh",
-            _ => panic!("too many screenshots"),
-        };
-        let path = format!("./extra-{}.png", name);
-        *counter += 1;
-        screenshot_manager
-            .save_screenshot_to_disk(main_window.single(), path)
-            .unwrap();
-    }
-}
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    info!("Hello, clouds!");
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_xyz(-0.75, 1.0, 2.0)
+                .looking_at(vec3(0.0, 0.0, 0.0), Vec3::Y),
+            camera: Camera {
+                hdr: true,
+                ..default()
+            },
+            ..default()
+        },
+        PanOrbitCamera::default(),
+        VolumetricCloudSettings::default(),
+    ));
 
-#[derive(Component, Clone)]
-pub struct MainCamera;
+    commands
+        .spawn(DirectionalLightBundle {
+            transform: Transform::from_xyz(1.0, 1.0, -0.3).looking_at(vec3(0.0, 0.5, 0.0), Vec3::Y),
+            directional_light: DirectionalLight {
+                shadows_enabled: true,
+                illuminance: 32000.0,
+                ..default()
+            },
+            ..default()
+        })
+        // Make sure to add this for the light to interact with the fog.
+        .insert(VolumetricCloudLight);
 
-fn rotate_light(time: Res<Time>, mut query: Query<&mut Transform, With<DirectionalLight>>) {
-    for mut transform in &mut query {
-        transform.rotate(Quat::from_rotation_y(time.delta_seconds()));
-    }
-}
+    commands
+        .spawn(SpatialBundle {
+            visibility: Visibility::Visible,
+            transform: Transform::from_xyz(0.0, 0.5, 0.0),
+            ..default()
+        })
+        .insert(CloudVolume {
+            density_texture: Some(asset_server.load("volumes/bunny.ktx2")),
+            density_factor: 1.0,
+            // Scatter as much of the light as possible, to brighten the bunny
+            // up.
+            scattering: 1.0,
+            ..default()
+        });
 
-fn setup(
-    mut commands: Commands,
-    _images: Res<Assets<Image>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
-) {
-    let skybox_handle = asset_server.load("textures/StandardCubeMap.png");
-    commands.insert_resource(SkyboxTexture {
-        image: skybox_handle.clone(),
-    });
+    let cube_mesh_handle = asset_server.add(Cuboid::default().mesh().into());
 
-    commands.spawn(DirectionalLightBundle {
-        transform: Transform::from_xyz(0.0, 8.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
+    let material = asset_server.add(StandardMaterial {
+        base_color: Color::LinearRgba(LinearRgba::new(0.0, 0.0, 0.0, 1.0)),
         ..default()
     });
 
-    commands.spawn((
-        Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 0.2, 2.8).looking_at(Vec3::ZERO, Vec3::Y),
-            ..default()
-        },
-        MainCamera,
-        PanOrbitCamera::default(),
-        // Skybox(skybox_handle),
-    ));
-
-    // commands.spawn((PbrBundle {
-    //     transform: Transform::from_xyz(0.0, -1.0, 0.0),
-    //     mesh: meshes.add(Mesh::from(shape::Plane {
-    //         size: 5.0,
-    //         subdivisions: 1,
-    //     })),
-    //     material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
-    //     ..Default::default()
-    // },));
-}
-
-#[derive(Resource)]
-struct SkyboxTexture {
-    image: Handle<Image>,
-}
-
-fn skybox_loaded(
-    asset_server: Res<AssetServer>,
-    mut images: ResMut<Assets<Image>>,
-    skybox_texture: ResMut<SkyboxTexture>,
-    _skyboxes: Query<&mut Skybox>,
-) {
-    if asset_server.load_state(&skybox_texture.image) == LoadState::Loaded {
-        let image = images.get_mut(&skybox_texture.image).unwrap();
-        if image.texture_descriptor.array_layer_count() == 1 {
-            image.reinterpret_stacked_2d_as_array(image.height() / image.width());
-            image.texture_view_descriptor = Some(TextureViewDescriptor {
-                dimension: Some(TextureViewDimension::Cube),
-                ..default()
-            });
-        }
-    }
+    commands.spawn(PbrBundle {
+        mesh: cube_mesh_handle,
+        material,
+        transform: Transform::from_xyz(0.0, 0.5, 0.0),
+        ..default()
+    });
 }

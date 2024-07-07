@@ -266,8 +266,8 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     }
     // Calculate light absorption
     let background_color = textureSample(screen_texture, screen_sampler, in.uv).rgb;
-    let cloud_color = light_energy * lights.directional_lights[0].color.rgb;
+    let cloud_color = light_energy * lights.directional_lights[0].color.rgb + vec3(0.02, 0.1, 0.3);
     let color = background_color * transmittance + cloud_color;
-    return vec4f(color, 0.0);
+    return vec4f(color, 1.0);
     // return vec4f(phase_value, phase_value, phase_value, 1.0) * 2.0;
 }

@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/target/debug/bevy_clouds.exe",
+            "cwd": "${workspaceRoot}",
+            "args": [],
+            "stopAtEntry": false,
+            "env": {
+                "PATH": "${env:RUSTUP_HOME}/toolchains/nightly-x86_64-pc-windows-msvc/bin;${workspaceFolder}/target/debug/deps;${env:PATH}",
+                "CARGO_MANIFEST_DIR": "${workspaceFolder}",
+            }
+        }
+    ]
+}
