@@ -2,17 +2,25 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug",
+            "name": "(Windows) Launch",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceRoot}/target/debug/bevy_clouds.exe",
-            "cwd": "${workspaceRoot}",
+            "program": "${workspaceFolder}/target/debug/bevy_clouds.exe",
             "args": [],
+            "preLaunchTask": "rust: cargo build",
             "stopAtEntry": false,
-            "env": {
-                "PATH": "${env:RUSTUP_HOME}/toolchains/nightly-x86_64-pc-windows-msvc/bin;${workspaceFolder}/target/debug/deps;${env:PATH}",
-                "CARGO_MANIFEST_DIR": "${workspaceFolder}",
-            }
-        }
-    ]
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "PATH",
+                    "value": "%USERPROFILE%/.rustup/toolchains/nightly-x86_64-pc-windows-msvc/bin;${workspaceFolder}/target/debug/deps;%PATH%"
+                },
+                {
+                    "name": "CARGO_MANIFEST_DIR",
+                    "value": "${workspaceFolder}"
+                }
+            ],
+            "console": "integratedTerminal",
+        },
+    ],
 }
