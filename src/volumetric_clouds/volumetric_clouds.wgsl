@@ -91,9 +91,8 @@ fn henyey_greenstein(neg_LdotV: f32) -> f32 {
 
 @fragment
 fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
-    if true {
-        return vec4<f32>(1.0, 0.0, 0.0, 1.0);
-    }
+    
+
     // Unpack the `volumetric_fog` settings.
     let uvw_from_world = volumetric_fog.uvw_from_world;
     let fog_color = volumetric_fog.fog_color;
@@ -110,6 +109,10 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
 
     // Unpack the view.
     let exposure = view.exposure;
+
+    if true {
+        return vec4(1.0, 0.0, 0.0, 0.0);
+    }
 
     // Sample the depth to put an upper bound on the length of the ray (as we
     // shouldn't trace through solid objects). If this is multisample, just use

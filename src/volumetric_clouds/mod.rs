@@ -226,7 +226,11 @@ impl Plugin for VolumetricCloudPlugin {
                 Core3d,
                 // Volumetric fog is a postprocessing effect. Run it after the
                 // main pass but before bloom.
-                (Node3d::EndMainPass, VolumetricCloudPass, Node3d::Bloom),
+                (
+                    Node3d::EndMainPass,
+                    VolumetricCloudPass,
+                    Node3d::EndMainPassPostProcessing,
+                ),
             );
     }
 }

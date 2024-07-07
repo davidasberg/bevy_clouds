@@ -7,7 +7,7 @@ use bevy::{
     math::{vec4, Mat3A, Vec3A},
     pbr::{
         MeshPipelineViewLayoutKey, MeshPipelineViewLayouts, MeshViewBindGroup,
-        ViewLightProbesUniformOffset, ViewLightsUniformOffset,
+        ViewFogUniformOffset, ViewLightProbesUniformOffset, ViewLightsUniformOffset,
         ViewScreenSpaceReflectionsUniformOffset,
     },
     prelude::*,
@@ -178,12 +178,12 @@ pub struct VolumetricCloudUniform {
     jitter_strength: f32,
 }
 
-/// Inserted on each `Entity` with an `ExtractedView` to keep track of its offset
-/// in the `gpu_fogs` `DynamicUniformBuffer` within `FogMeta`
-#[derive(Component)]
-pub struct ViewFogUniformOffset {
-    pub offset: u32,
-}
+// /// Inserted on each `Entity` with an `ExtractedView` to keep track of its offset
+// /// in the `gpu_fogs` `DynamicUniformBuffer` within `FogMeta`
+// #[derive(Component)]
+// pub struct ViewFogUniformOffset {
+//     pub offset: u32,
+// }
 
 /// Specifies the offset within the [`VolumetricCloudUniformBuffer`] of the
 /// [`VolumetricCloudUniform`] for a specific view.
@@ -304,8 +304,8 @@ impl ViewNode for VolumetricCloudNode {
         Read<ViewVolumetricFogPipelines>,
         Read<ViewUniformOffset>,
         Read<ViewLightsUniformOffset>,
-        Read<ViewFogUniformOffset>,
         Read<ViewLightProbesUniformOffset>,
+        Read<ViewFogUniformOffset>,
         Read<ViewVolumetricCloud>,
         Read<MeshViewBindGroup>,
         Read<ViewScreenSpaceReflectionsUniformOffset>,
@@ -321,15 +321,14 @@ impl ViewNode for VolumetricCloudNode {
             view_volumetric_lighting_pipelines,
             view_uniform_offset,
             view_lights_offset,
-            view_fog_offset,
             view_light_probes_offset,
+            view_fog_offset,
             view_fog_volumes,
             view_bind_group,
             view_ssr_offset,
         ): QueryItem<'w, Self::ViewQuery>,
         world: &'w World,
     ) -> Result<(), NodeRunError> {
-        info!("Running Volumetric Cloud Node");
         let pipeline_cache = world.resource::<PipelineCache>();
         let volumetric_lighting_pipeline = world.resource::<VolumetricCloudPipeline>();
         let volumetric_lighting_uniform_buffers = world.resource::<VolumetricCloudUniformBuffer>();
