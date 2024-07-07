@@ -1,6 +1,6 @@
 mod camera_controller;
 mod volumetric_clouds;
-use bevy::{math::vec3, prelude::*};
+use bevy::{log::tracing_subscriber::fmt::time, math::vec3, prelude::*};
 
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use camera_controller::{PanOrbitCamera, PanOrbitCameraPlugin};
@@ -78,10 +78,11 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 /// Rotates the camera a bit every frame.
-fn rotate_camera(mut cameras: Query<&mut Transform, With<Camera3d>>) {
+fn rotate_camera(mut cameras: Query<&mut Transform, With<Camera3d>>, time: Res<Time>) {
     for mut camera_transform in cameras.iter_mut() {
-        *camera_transform =
-            Transform::from_translation(Quat::from_rotation_y(0.01) * camera_transform.translation)
-                .looking_at(vec3(0.0, 0.5, 0.0), Vec3::Y);
+        *camera_transform = Transform::from_translation(
+            Quat::from_rotation_y(time.delta_seconds()) * camera_transform.translation,
+        )
+        .looking_at(vec3(0.0, 0.5, 0.0), Vec3::Y);
     }
 }
