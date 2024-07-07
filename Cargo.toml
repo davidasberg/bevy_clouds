@@ -7,7 +7,11 @@ edition = "2021"
 
 [dependencies]
 
-bevy = { version = "0.14", features = ["dynamic_linking", "file_watcher"] }
+bevy = { version = "0.14", features = [
+    "dynamic_linking",
+    "file_watcher",
+    "embedded_watcher",
+] }
 bevy-inspector-egui = "0.25"
 bitflags = "2.6.0"
 
